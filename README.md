@@ -10,7 +10,7 @@ The display shows the following information:
 * The arrival time of the nearest train - example being "5min"
 
 ## Installation
-* Create API access token on the [CTA developer site](https://www.transitchicago.com/developers/traintracker/) and [CTA Bus developer site](https://www.transitchicago.com/developers/bustracker/) (optional)
+* Create API access token on the [CTA Transit Tracker developer site](https://www.transitchicago.com/developers/traintracker/) and [CTA Bus developer site](https://www.transitchicago.com/developers/bustracker/) (optional)
 * Clone the repository on your Raspberry Pi with the following `git clone https://github.com/brandonmcfadd/ctapi.git`
 * Change into the working directory of the cloned repository `cd ctapi`
 * Create a virtual environment to work in `python3 -m venv .`
