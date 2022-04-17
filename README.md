@@ -1,4 +1,4 @@
-# ctapi
+# ctapi (under development)
 
 ## Overview
 This project is used to display the nearest train at a specific L stop in Chicao, IL. The project runs on a Raspberry Pi and the display used is the [e-ink bonnet from Adafruit](https://www.adafruit.com/product/4687).
@@ -25,4 +25,5 @@ The display shows the following information:
 * To change the station being displayed modify the Station/Stop Information in `main.py` with the station code(s) you want to use.
 * Station codes can be found on the following [site](https://data.cityofchicago.org/Transportation/CTA-System-Information-List-of-L-Stops/8pix-ypme) from the City of Chicago's Data Portal.
 
-![metropi](./images/metropi.png)
+## Example
+* coming soon
