@@ -17,8 +17,8 @@ The display shows the following information:
 * Activate the virtual environment `source bin/activate`
 * Install the required dependencies `pip install -r requirements.txt`
 * Create a file named `.env` in your directory with the following content 
-* `TRAIN_API_KEY = 'YOUR_TRANSIT_API_KEY'`
-* `BUS_API_KEY = 'YOUR_TRANSIT_API_KEY'` (optional)
+    <br>`TRAIN_API_KEY = 'YOUR_TRANSIT_API_KEY'`
+    <br>`BUS_API_KEY = 'YOUR_TRANSIT_API_KEY'` (optional)
 * Run the main program `python3 main.py`
 
 ## Configuration
