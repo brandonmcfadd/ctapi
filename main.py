@@ -294,6 +294,6 @@ while True:  # Where the magic happens
             # gfx.update_time()
 
             # Wait a respectable amount of time so the display can refresh
-            time.sleep(15)
+            time.sleep(2)
 
         REFRESH_DISPLAY = time.monotonic()
