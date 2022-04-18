@@ -1,147 +1,299 @@
-from glob import glob
-import requests # Used for API Calls
-import xml.etree.ElementTree as ET # Used to Parse API Response
-from datetime import datetime,timedelta # Used for converting Prediction from Current Time
-import time # Used to Get Current Time
-import os # Used to Load Env Var
-from dotenv import load_dotenv # Used to Load Env Var
+"""ctapi by Brandon McFadden - Github: https://github.com/brandonmcfadd/ctapi"""
+import os  # Used to Load Env Var
+import json  # Used to maintain
+import time  # Used to Get Current Time
+# Used for converting Prediction from Current Time
+from datetime import datetime, timedelta
+import xml.etree.ElementTree as ET  # Used to Parse API Response
+from dotenv import load_dotenv  # Used to Load Env Var
+import requests  # Used for API Calls
+# # Imports for later when pushed to Pi w/ e-ink display
+# import digitalio
+# import busio
+# import board
+# from adafruit_epd.ssd1675 import Adafruit_SSD1675
+# from display_cta_graphics import CTA_Graphics
 
 # Load .env variables
 load_dotenv()
+
+# # Saving for later when pushed to Pi w/ e-ink display
+# Prepare Output Screen
+# spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
+# ecs = digitalio.DigitalInOut(board.CE0)
+# dc = digitalio.DigitalInOut(board.D22)
+# rst = digitalio.DigitalInOut(board.D27)
+# busy = digitalio.DigitalInOut(board.D17)
+
+# # Saving for later when pushed to Pi w/ e-ink display
+# display = Adafruit_SSD1675(   # Older eInk Bonnet
+#     122, 250, spi, cs_pin=ecs, dc_pin=dc, sramcs_pin=None, rst_pin=rst, busy_pin=busy,
+# )
 
 # API Keys
 train_api_key = os.getenv('TRAIN_API_KEY')
 bus_api_key = os.getenv('BUS_API_KEY')
 
-# Station/Stop Information
-train_station_stpId_1 = "30197" # (Used to Identify Platform Side) # Logan Square (O'Hare Bound)
-train_station_stpId_2 = "30198" # (Used to Identify Platform Side) # Logan Square (Forrest Park Bound)
-train_station_mapid_1 = "41020" # (Used by API) # Logan Square - Blue Line
-bus_stop_code_1 = "5465" # Milwaukee & Spaulding - Southeastbound - Northwest Corner
-bus_stop_code_2 = "1323" # Fullerton & Spaulding - Eastbound - Southwest Corner
+# API URL's
+TRAIN_TRACKER_URL = "http://lapi.transitchicago.com/api/1.0/ttarrivals.aspx?key={}&stpid={}"
+BUS_TRACKER_URL = "http://www.ctabustracker.com/bustime/api/v2/getpredictions?key={}&stpid={}&rt={}"
 
-# Last Known Information
-train_route_1 = "Unknown"
-train_route_2 = "Unknown"
-bus_route_1 = "Unknown"
-bus_route_2 = "Unknown"
+# Station/Stop Information for Trains/Buses - Bus Stop Items must contain equal number of items
+# Enter the train station #'s to lookup
+TRAIN_STATION_STOP_IDS = "30197,30198,30148,30088"
 
-def minutes_between(d1, d2):
-    d1 = datetime.strptime(d1, "%Y%m%d %H:%M:%S")
-    d2 = datetime.strptime(d2, "%Y%m%d %H:%M:%S")
-    difference = d2 - d1
+# Enter the bus stop #'s for the stops you want estimated times for
+BUS_STOP_STOP_IDS = "5465,1323"
+# Enter the corresponding bus route # you want for each bus_stop_id
+BUS_STOP_ROUTE_IDS = "76,74"
+
+# Last Known Information (used if API returns no arrival times) - Updated on successful API call
+last_known_route_information = json.loads('{"trains":{},"buses":{}}')
+
+
+def train_api_call_to_cta(stop_id):
+    """Gotta talk to the CTA and get Train Times"""
+    api_response = requests.get(
+        TRAIN_TRACKER_URL.format(train_api_key, stop_id))
+    train_eta_times(parse_api_response(api_response))
+    return api_response
+
+
+def bus_api_call_to_cta(stop_code, route_code):
+    """Gotta talk to the CTA and get Bus Times"""
+    api_response = requests.get(BUS_TRACKER_URL.format(
+        bus_api_key, stop_code, route_code))
+    bus_eta_times(parse_api_response(api_response))
+    return api_response
+
+
+def parse_api_response(api_response_input):
+    """Turns XML Response into a useable format"""
+    root = ET.fromstring(api_response_input.content)
+    return root
+
+
+def minutes_between(date_1, date_2):
+    """Takes the difference between two times and returns the minutes"""
+    date_1 = datetime.strptime(date_1, "%Y%m%d %H:%M:%S")
+    date_2 = datetime.strptime(date_2, "%Y%m%d %H:%M:%S")
+    difference = date_2 - date_1
     difference_in_minutes = int(difference / timedelta(minutes=1))
     return difference_in_minutes
 
-def add_train_eta_to_array(eta):
-    global train_route_1
-    global train_route_2
+
+def add_train_station_to_json(station_name):
+    """Function is called if a new station is identified per API Call"""
+    station_information = {}
+    arrival_information["trains"][station_name] = station_information
+    last_known_route_information["trains"][station_name] = station_information
+
+
+def add_train_stop_to_json(eta, stop_id):
+    """Function is called if a new train stop is identified per API Call"""
+    stop_information = {}
+    last_known_info = {}
+    station_name = eta.find('staNm').text
+
+    last_known_info["name"] = eta.find(
+        'rt').text + " Line towards " + eta.find('destNm').text
+    stop_information["full_name"] = eta.find(
+        'rt').text + " Line towards " + eta.find('destNm').text
+    stop_information["destination_name"] = eta.find('destNm').text
+    stop_information["route"] = eta.find('rt').text
+    stop_information["estimated_times"] = []
+
+    last_known_route_information["trains"][station_name] = last_known_info
+    arrival_information["trains"][station_name][stop_id] = stop_information
+
+
+def add_bus_stop_to_json(prd, stop_id):
+    """Function is called if a new bus stop is identified per API Call"""
+    stop_information = {}
+    last_known_info = {}
+
+    stop_information["full_name"] = prd.find(
+        'rt').text + " towards " + prd.find('des').text
+    stop_information["destination_name"] = prd.find('des').text
+    stop_information["route"] = prd.find('rt').text
+    stop_information["stop_name"] = prd.find('stpnm').text
+    stop_information["estimated_times"] = []
+
+    last_known_info["name"] = prd.find(
+        'rt').text + " towards " + prd.find('des').text
+
+    arrival_information["buses"][stop_id] = stop_information
+    last_known_route_information["buses"][stop_id] = last_known_info
+
+
+def train_eta_times(train_api_response):
+    """Takes each Train ETA (if exists) and appends to list"""
+    for eta in train_api_response.iter('eta'):
+        train_stop_id = eta.find('stpId').text
+        train_station_name = eta.find('staNm').text
+
+        if train_station_name not in arrival_information["trains"]:
+            add_train_station_to_json(train_station_name)
+
+        if train_stop_id in arrival_information["trains"][train_station_name]:
+            add_train_eta_to_array(eta, train_station_name, train_stop_id)
+        else:
+            add_train_stop_to_json(eta, train_stop_id)
+            add_train_eta_to_array(eta, train_station_name, train_stop_id)
+
+
+def add_train_eta_to_array(eta, station_name, stop_id):
+    """Parses API Result from Train Tracker API and adds ETA's to a list"""
     if eta.find('isApp').text == "1":
-        if eta.find('stpId').text == train_station_stpId_1:
-            arrival_times['train_direction_1'].append("Due")
-        elif eta.find('stpId').text == train_station_stpId_2:
-            arrival_times['train_direction_2'].append("Due")
+        arrival_information["trains"][station_name][stop_id]["estimated_times"].append(
+            "Due")
     else:
         prediction = eta.find('prdt').text
         arrival = eta.find('arrT').text
         estimated_time = str(minutes_between(prediction, arrival))
-        if eta.find('stpId').text == train_station_stpId_1:
-            direction_information["train_direction_1"].append(eta.find('destNm').text)
-            arrival_times['train_direction_1'].append(estimated_time + "min")
-            train_route_1 = eta.find('rt').text + " Line - " + eta.find('stpDe').text
-        elif eta.find('stpId').text == train_station_stpId_2:
-            direction_information["train_direction_2"].append(eta.find('destNm').text)
-            arrival_times['train_direction_2'].append(estimated_time + "min")
-            train_route_2 = eta.find('rt').text + " Line - " + eta.find('stpDe').text
+        (arrival_information["trains"][station_name][stop_id]
+         ["estimated_times"].append(estimated_time + "min"))
 
-def add_bus_eta_to_array(prd):
-    global bus_route_1
-    global bus_route_2
-    if prd.find('stpid').text == bus_stop_code_1:
-            direction_information["bus_1"].append(eta.find('destNm').text)
-            arrival_times["bus_1"].append(str(prd.find('prdctdn').text) + "min")
-            bus_route_1 = eta.find('rt').text + " Line - " + eta.find('stpDe').text
-    elif prd.find('stpid').text == bus_stop_code_2:
-            direction_information["bus_2"].append(eta.find('destNm').text)
-            arrival_times["bus_2"].append(str(prd.find('prdctdn').text) + "min")
-            bus_route_2 = eta.find('rt').text + " Line - " + eta.find('stpDe').text
-    
 
-def parse_api_response(response):
-    root = ET.fromstring(response.content)
-    return root
+def bus_eta_times(bus_api_response):
+    """Takes each Bus ETA (if exists) and appends to list"""
+    if bus_api_response.find('error') is None:
+        for prd in bus_api_response.iter('prd'):
+            stop_id = prd.find('stpid').text
+            if stop_id in arrival_information["buses"]:
+                add_bus_eta_to_array(prd, stop_id)
+            else:
+                add_bus_stop_to_json(prd, stop_id)
+                add_bus_eta_to_array(prd, stop_id)
 
-def train_eta_times(response):
-    if response.find('eta') is None:
-        arrival_times["train_direction_2"].append("No service scheduled")
-        arrival_times["train_direction_1"].append("No service scheduled")
-    else: 
-        for eta in response.iter('eta'):
-            add_train_eta_to_array(eta)
 
-def bus_eta_times(response):
-    if response.find('error') is None:
-        for prd in response.iter('prd'):
-            direction_information["bus_1"].append(str(prd.find('rt').text) + " towards " + prd.find('des').text)
-            add_bus_eta_to_array(prd)
+def add_bus_eta_to_array(prd, stop_id):
+    """Parses API Result from Bus Tracker API and adds ETA's to a list"""
+    if prd.find('prdctdn').text == "DUE":
+        arrival_information["buses"][stop_id]["estimated_times"].append("Due")
+    elif prd.find('prdctdn').text == "DLY":
+        arrival_information["buses"][stop_id]["estimated_times"].append(
+            "Delayed")
     else:
-        for error in response.iter('error'):
-            arrival_times["bus_1"].append(error.find('msg').text)
+        (arrival_information["buses"][stop_id]
+         ["estimated_times"].append(prd.find('prdctdn').text + "min"))
+
 
 def create_string_of_times(times):
-    count = 0
+    """Takes each ETA from list and builds a useable string"""
+    string_count = 0
     for item in times:
-        if count == 0:
+        if string_count == 0:
             string = item
-            count += 1
-        elif count == 1:
+            string_count += 1
+        elif string_count == 1:
             string = string + ", " + item
     return string
-        
-def train_api_call_to_cta():
-    api_response = requests.get("http://lapi.transitchicago.com/api/1.0/ttarrivals.aspx?key={}&mapid={}".format(train_api_key,train_station_mapid_1))
-    train_eta_times(parse_api_response(api_response))
-    
-def bus_api_call_to_cta(stop_code):
-    api_response = requests.get("http://www.ctabustracker.com/bustime/api/v2/getpredictions?key={}&stpid={}".format(bus_api_key,stop_code))
-    bus_eta_times(parse_api_response(api_response))
 
-refresh_display = None
 
-while True:
-    if (not refresh_display) or (time.monotonic() - refresh_display) > 60:
+def information_output_to_display(arrival_information_input):
+    """Used to create structure for use when outputting data to e-ink display"""
+    display_information_output = []
+    for station in arrival_information_input['trains']:
+        for train in arrival_information_input['trains'][station]:
+            display_information_output.append(
+                {
+                    'station_name': station,
+                    'line_and_destination': (arrival_information['trains']
+                                             [station][train]['route'] + " Line to " +
+                                             arrival_information['trains']
+                                             [station][train]['destination_name']),
+                    'estimated_times': create_string_of_times(arrival_information['trains']
+                                                              [station][train]["estimated_times"])
+                }
+            )
+
+    for bus in arrival_information['buses']:
+        display_information_output.append(
+            {
+                'station_name': arrival_information['buses'][bus]["stop_name"],
+                'line_and_destination': arrival_information['buses'][bus]["full_name"],
+                'estimated_times': create_string_of_times(arrival_information['buses']
+                                                          [bus]["estimated_times"])
+            }
+        )
+    return display_information_output
+
+# # Saving for later when pushed to Pi w/ e-ink display
+# display.rotation = 1
+# gfx = CTA_Graphics(display)
+
+
+REFRESH_DISPLAY = None
+
+print("Welcome to TrainTracker, Python/RasPi Edition!")
+while True:  # Where the magic happens
+    if (not REFRESH_DISPLAY) or (time.monotonic() - REFRESH_DISPLAY) > 15:
+        current_time = "\nThe Current Time is: " + \
+            datetime.strftime(datetime.now(), "%H:%M")
+        print(current_time)
         # Variable for storing arrival information - reset each loop
-        direction_information = {"train_direction_1":[],"train_direction_2":[],"bus_1":[],"bus_2":[]}
-        arrival_times = {"train_direction_1":[],"train_direction_2":[],"bus_1":[],"bus_2":[]}
-        print_information = []
-        
-        train_api_response = train_api_call_to_cta()
-        if bus_stop_code_1 != "":
-            bus_api_response = bus_api_call_to_cta(bus_stop_code_1)
-        if bus_stop_code_2 != "":
-            bus_api_response = bus_api_call_to_cta(bus_stop_code_2)
+        arrival_information = json.loads('{"trains":{},"buses":{}}')
+        display_information = []
 
-        print("\nThe Current Time is: " + datetime.strftime(datetime.now(), "%m/%d/%Y %H:%M"))
-        try:
-            print_information.append("Next " + direction_information["train_direction_1"][0] + " Bound Train in: " + create_string_of_times(arrival_times["train_direction_1"]))
-        except:
-            print_information.append("No arrivals at: " + train_route_1)
-        try:
-            print_information.append("Next " + direction_information["train_direction_2"][0] + " Bound Train in: " + create_string_of_times(arrival_times["train_direction_2"]))
-        except:
-            print_information.append("No arrivals at: " + train_route_2)
-        try:
-            print_information.append("Next " + direction_information["bus_1"][0] + ": " + create_string_of_times(arrival_times["bus_1"]))
-        except:
-            print_information.append("No arrivals at: " + bus_route_1)
-        try:
-            print_information.append("Next " + direction_information["bus_2"][0] + ": " + create_string_of_times(arrival_times["bus_2"]))
-        except:
-            print_information.append("No arrivals at: " + bus_route_2)
+        if TRAIN_STATION_STOP_IDS != "":
+            train_station_stpIds_split = TRAIN_STATION_STOP_IDS.split(',')
+            for train_stop_id_to_check in train_station_stpIds_split:
+                try:
+                    response = train_api_call_to_cta(train_stop_id_to_check)
+                except:  # pylint: disable=bare-except
+                    print("Error in API Call to Train Tracker")
 
-        for item in print_information:
-            print(item)
+        if BUS_STOP_STOP_IDS != "":
+            bus_stop_stpids_split = BUS_STOP_STOP_IDS.split(',')
+            bus_stop_route_ids_split = BUS_STOP_ROUTE_IDS.split(',')
+            BUS_COUNT = 0
+            for bus_stop_id in bus_stop_stpids_split:
+                try:
+                    bus_api_call_to_cta(
+                        bus_stop_id, bus_stop_route_ids_split[BUS_COUNT])
+                    BUS_COUNT += 1
+                except:  # pylint: disable=bare-except
+                    print("Error in API Call to Bus Tracker")
 
-        refresh_display = time.monotonic()
-    
-    time.sleep(60)
+        cta_status = information_output_to_display(arrival_information)
+
+        LOOP_COUNT = 0
+        while LOOP_COUNT < len(cta_status):
+            try:
+                DESTINATION_NAME_1 = cta_status[LOOP_COUNT]['line_and_destination']
+                LOCATION_NAME_1 = cta_status[LOOP_COUNT]['station_name']
+                ARRIVAL_MINUTES_1 = cta_status[LOOP_COUNT]['estimated_times']
+            except:  # pylint: disable=bare-except
+                DESTINATION_NAME_1 = ""
+                LOCATION_NAME_1 = ""
+                ARRIVAL_MINUTES_1 = ""
+            LOOP_COUNT += 1
+            try:
+                DESTINATION_NAME_2 = cta_status[LOOP_COUNT]['line_and_destination']
+                LOCATION_NAME_2 = cta_status[LOOP_COUNT]['station_name']
+                ARRIVAL_MINUTES_2 = cta_status[LOOP_COUNT]['estimated_times']
+            except:  # pylint: disable=bare-except
+                DESTINATION_NAME_2 = ""
+                LOCATION_NAME_2 = ""
+                ARRIVAL_MINUTES_2 = ""
+            LOOP_COUNT += 1
+            if DESTINATION_NAME_1 != "":
+                print(DESTINATION_NAME_1)
+                print(LOCATION_NAME_1)
+                print(ARRIVAL_MINUTES_1)
+                print("------------------------")
+            if DESTINATION_NAME_2 != "":
+                print(DESTINATION_NAME_2)
+                print(LOCATION_NAME_2)
+                print(ARRIVAL_MINUTES_2)
+                print("------------------------")
+
+            # # Saving for later when pushed to Pi w/ e-ink display
+            # gfx.display_metro(arrival_information)
+            # gfx.update_time()
+
+            # Wait a respectable amount of time so the display can refresh
+            time.sleep(15)
+
+        REFRESH_DISPLAY = time.monotonic()

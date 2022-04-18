@@ -2,20 +2,15 @@ from datetime import datetime
 from PIL import Image, ImageDraw, ImageFont
 from adafruit_epd.epd import Adafruit_EPD
 
-small_font = ImageFont.truetype(
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 16
-)
-medium_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 20)
-large_font = ImageFont.truetype(
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 24
-)
+small_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 12)
+medium_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+large_font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 20)
 
 # RGB Colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 
-
-class Metro_Graphics:
+class CTA_Graphics:
     def __init__(self, display):
 
         self.small_font = small_font
@@ -25,49 +20,65 @@ class Metro_Graphics:
         self.display = display
 
         self._metro_icon = None
-        self._destination_name = None
-        self._location_name = None
-        self._arrival_minutes = None
+        self._destination_name_1 = None
+        self._location_name_1 = None
+        self._arrival_minutes_1 = None
+        self._destination_name_2 = None
+        self._location_name_2 = None
+        self._arrival_minutes_2 = None
         self._line = None
-        self._progress = None
-        self._has_arrived = None
+        self._time_text = None
 
-    def display_metro(self, metro_status):
-     
-        if len(metro_status['Trains']) > 0:
-          destination_name = metro_status['Trains'][0]['DestinationName']
-          self._destination_name = destination_name
-          print('Destination: ' + destination_name)
-
-          location_name = metro_status['Trains'][0]['LocationName']
-          self._location_name = location_name
-          print('Current Location: ' + location_name)
-
-          line = metro_status['Trains'][0]['Line']
-          self._line = line
-          print('Line: ' + line)
-
-          arrival_minutes = metro_status['Trains'][0]['Min']
-          if arrival_minutes.isdigit():
-              has_arrived = False
-              progress = self.display.width / int(arrival_minutes)
-              arrival_minutes = arrival_minutes + 'min'
-              self._progress = progress
-          else:
-              has_arrived = True
-
-          self._has_arrived = has_arrived
-          self._arrival_minutes = arrival_minutes
-          print('Arrival Status: ' + arrival_minutes)
-        else:
-            self._destination_name = 'No Trains'
+    def display_metro(self, cta_status):
+        
+        count = 0
+        while count < len(cta_status):
+            try:
+                destination_name_1 = cta_status[count]['line_and_destination']
+                self._destination_name_1 = destination_name_1
+                print('Destination 1: ' + destination_name_1)
+                
+                location_name_1 = cta_status[count]['station_name']
+                self._location_name_1 = location_name_1
+                print('Station Name 1: ' + location_name_1)
+                
+                arrival_minutes_1 = cta_status[count]['estimated_times']
+                self._arrival_minutes_1 = arrival_minutes_1
+                print('Arrival Status: ' + arrival_minutes_1)
+            except:
+                destination_name_1 = ""
+                self._destination_name_1 = ""
+                location_name_1 = ""
+                self._location_name_1 = ""
+                arrival_minutes_1 = ""
+                self._arrival_minutes_1 = ""
+            count += 1
+            try:
+                destination_name_2 = cta_status[count]['line_and_destination']
+                self._destination_name_2 = destination_name_2
+                print('Destination 2: ' + destination_name_2)
+                
+                location_name_2 = cta_status[count]['station_name']
+                self._location_name_2 = location_name_2
+                print('Station Name 2: ' + location_name_2)
+                
+                arrival_minutes_2 = cta_status[count]['estimated_times']
+                self._arrival_minutes_2 = arrival_minutes_2
+                print('Arrival Status: ' + arrival_minutes_2)
+            except:
+                destination_name_2 = ""
+                self._destination_name_2 = ""
+                location_name_2 = ""
+                self._location_name_2 = ""
+                arrival_minutes_2 = ""
+                self._arrival_minutes_2 = ""
+            count += 1
 
         self.update_time()
         self.update_display()
 
     def update_time(self):
-        now = datetime.now()
-        self._time_text = now.strftime("%I:%M %p").lstrip("0").replace(" 0", " ")
+        self._time_text = datetime.strftime(datetime.now(), "%H:%M")
 
     def update_display(self):
         self.display.fill(Adafruit_EPD.WHITE)
