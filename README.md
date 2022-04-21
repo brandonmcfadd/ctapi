@@ -1,7 +1,7 @@
 # ctapi (under development)
 
 ## Overview
-This project is used to display the nearest train at a specific L stop in Chicao, IL. The project runs on a Raspberry Pi and the display used is the [e-ink bonnet from Adafruit](https://www.adafruit.com/product/4687).
+This project is used to display the nearest train at a specific L stop in Chicao, IL. The project runs on a Raspberry Pi and the display used is the [Adafruit MagTag - 2.9" Grayscale E-Ink WiFi Display](https://www.adafruit.com/product/4800).
 
 The display shows the following information (image coming soon): 
 * Station or Stop Name - example(s) being "Logan Square"
