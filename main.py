@@ -5,34 +5,98 @@ import time  # Used to Get Current Time
 # Used for converting Prediction from Current Time
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET  # Used to Parse API Response
-from dotenv import load_dotenv  # Used to Load Env Var
-import requests  # Used for API Calls
-# # Imports for later when pushed to Pi w/ e-ink display
-# import digitalio
-# import busio
-# import board
-# from adafruit_epd.ssd1675 import Adafruit_SSD1675
-# from display_cta_graphics import CTA_Graphics
+import adafruit_requests
+from adafruit_magtag.magtag import MagTag
+from adafruit_display_shapes.line import Line
 
-# Load .env variables
-load_dotenv()
+# Get wifi details and more from a secrets.py file
+try:
+    from secrets import secrets
+except ImportError:
+    print("Secrets are kept in secrets.py, please add them there!")
+    raise
 
-# # Saving for later when pushed to Pi w/ e-ink display
-# Prepare Output Screen
-# spi = busio.SPI(board.SCK, MOSI=board.MOSI, MISO=board.MISO)
-# ecs = digitalio.DigitalInOut(board.CE0)
-# dc = digitalio.DigitalInOut(board.D22)
-# rst = digitalio.DigitalInOut(board.D27)
-# busy = digitalio.DigitalInOut(board.D17)
+magtag = MagTag()
+magtag.network.connect()
 
-# # Saving for later when pushed to Pi w/ e-ink display
-# display = Adafruit_SSD1675(   # Older eInk Bonnet
-#     122, 250, spi, cs_pin=ecs, dc_pin=dc, sramcs_pin=None, rst_pin=rst, busy_pin=busy,
-# )
+magtag.add_text(
+    text_font="/fonts/AmericanSans-Bold-14.pcf",
+    text_position=(
+        8,
+        8,
+    ),
+    text_anchor_point=(0.5, 0.5),
+    is_data=False,
+)  # Station/Stop Name 1
+
+magtag.add_text(
+    text_font="/fonts/AmericanSans-14.pcf",
+    text_position=(
+        8,
+        48,
+    ),
+    text_anchor_point=(0.5, 0.5),
+    is_data=False,
+)  # Direction 1
+
+magtag.add_text(
+    text_font="/fonts/AmericanSansItalic-12.pcf",
+    text_position=(
+        198,
+        48,
+    ),
+    text_anchor_point=(0.5, 0.5),
+    is_data=False,
+)  # Estimated Times 1
+
+magtag.append(
+    Line(0, (magtag.graphics.display.height // 2) - 1,
+         magtag.graphics.display.width,
+         (magtag.graphics.display.height // 2) - 1, 0xFF0000))
+magtag.append(
+    Line(0, (magtag.graphics.display.height // 2) - 0,
+         magtag.graphics.display.width,
+         (magtag.graphics.display.height // 2) - 0, 0xFF0000))
+magtag.append(
+    Line(0, (magtag.graphics.display.height // 2) + 1,
+         magtag.graphics.display.width,
+         (magtag.graphics.display.height // 2) + 1, 0xFF0000))
+
+magtag.add_text(
+    text_font="/fonts/AmericanSans-Bold-14.pcf",
+    text_position=(
+        8,
+        8,
+    ),
+    text_anchor_point=(0.5, 0.5),
+    is_data=False,
+)  # Station/Stop Name 2
+
+magtag.add_text(
+    text_font="/fonts/AmericanSans-14.pcf",
+    text_position=(
+        8,
+        80,
+    ),
+    text_anchor_point=(0.5, 0.5),
+    is_data=False,
+)  # Direction 2
+
+magtag.add_text(
+    text_font="/fonts/AmericanSansItalic-12.pcf",
+    text_position=(
+        198,
+        80,
+    ),
+    text_anchor_point=(0.5, 0.5),
+    is_data=False,
+)  # Estimated Times 2
+
+magtag.graphics.set_background("/bmps/background.bmp")
 
 # API Keys
-train_api_key = os.getenv('TRAIN_API_KEY')
-bus_api_key = os.getenv('BUS_API_KEY')
+train_api_key = secrets["TRAIN_API_KEY"]
+bus_api_key = secrets["BUS_API_KEY"]
 
 # API URL's
 TRAIN_TRACKER_URL = "http://lapi.transitchicago.com/api/1.0/ttarrivals.aspx?key={}&stpid={}"
@@ -40,7 +104,7 @@ BUS_TRACKER_URL = "http://www.ctabustracker.com/bustime/api/v2/getpredictions?ke
 
 # Station/Stop Information for Trains/Buses - Bus Stop Items must contain equal number of items
 # Enter the train station #'s to lookup
-TRAIN_STATION_STOP_IDS = "30197,30198,30148,30088"
+TRAIN_STATION_STOP_IDS = "30197,30198"
 
 # Enter the bus stop #'s for the stops you want estimated times for
 BUS_STOP_STOP_IDS = "5465,1323"
@@ -61,8 +125,8 @@ def train_api_call_to_cta(stop_id):
 
 def bus_api_call_to_cta(stop_code, route_code):
     """Gotta talk to the CTA and get Bus Times"""
-    api_response = requests.get(BUS_TRACKER_URL.format(
-        bus_api_key, stop_code, route_code))
+    api_response = requests.get(
+        BUS_TRACKER_URL.format(bus_api_key, stop_code, route_code))
     bus_eta_times(parse_api_response(api_response))
     return api_response
 
@@ -119,8 +183,8 @@ def add_bus_stop_to_json(prd, stop_id):
     stop_information["stop_name"] = prd.find('stpnm').text
     stop_information["estimated_times"] = []
 
-    last_known_info["name"] = prd.find(
-        'rt').text + " towards " + prd.find('des').text
+    last_known_info["name"] = prd.find('rt').text + " towards " + prd.find(
+        'des').text
 
     arrival_information["buses"][stop_id] = stop_information
     last_known_route_information["buses"][stop_id] = last_known_info
@@ -145,8 +209,8 @@ def train_eta_times(train_api_response):
 def add_train_eta_to_array(eta, station_name, stop_id):
     """Parses API Result from Train Tracker API and adds ETA's to a list"""
     if eta.find('isApp').text == "1":
-        arrival_information["trains"][station_name][stop_id]["estimated_times"].append(
-            "Due")
+        arrival_information["trains"][station_name][stop_id][
+            "estimated_times"].append("Due")
     else:
         prediction = eta.find('prdt').text
         arrival = eta.find('arrT').text
@@ -175,8 +239,8 @@ def add_bus_eta_to_array(prd, stop_id):
         arrival_information["buses"][stop_id]["estimated_times"].append(
             "Delayed")
     else:
-        (arrival_information["buses"][stop_id]
-         ["estimated_times"].append(prd.find('prdctdn').text + "min"))
+        (arrival_information["buses"][stop_id]["estimated_times"].append(
+            prd.find('prdctdn').text + "min"))
 
 
 def create_string_of_times(times):
@@ -196,42 +260,35 @@ def information_output_to_display(arrival_information_input):
     display_information_output = []
     for station in arrival_information_input['trains']:
         for train in arrival_information_input['trains'][station]:
-            display_information_output.append(
-                {
-                    'station_name': station,
-                    'line_and_destination': (arrival_information['trains']
-                                             [station][train]['route'] + " Line to " +
-                                             arrival_information['trains']
-                                             [station][train]['destination_name']),
-                    'estimated_times': create_string_of_times(arrival_information['trains']
-                                                              [station][train]["estimated_times"])
-                }
-            )
+            display_information_output.append({
+                'station_name':
+                station,
+                'line_and_destination':
+                (arrival_information['trains'][station][train]['route'] +
+                 " Line to " + arrival_information['trains'][station][train]
+                 ['destination_name']),
+                'estimated_times':
+                create_string_of_times(arrival_information['trains'][station]
+                                       [train]["estimated_times"])
+            })
 
     for bus in arrival_information['buses']:
-        display_information_output.append(
-            {
-                'station_name': arrival_information['buses'][bus]["stop_name"],
-                'line_and_destination': arrival_information['buses'][bus]["full_name"],
-                'estimated_times': create_string_of_times(arrival_information['buses']
-                                                          [bus]["estimated_times"])
-            }
-        )
+        display_information_output.append({
+            'station_name':
+            arrival_information['buses'][bus]["stop_name"],
+            'line_and_destination':
+            arrival_information['buses'][bus]["full_name"],
+            'estimated_times':
+            create_string_of_times(
+                arrival_information['buses'][bus]["estimated_times"])
+        })
     return display_information_output
-
-# # Saving for later when pushed to Pi w/ e-ink display
-# display.rotation = 1
-# gfx = CTA_Graphics(display)
 
 
 REFRESH_DISPLAY = None
 
-print("Welcome to TrainTracker, Python/RasPi Edition!")
 while True:  # Where the magic happens
     if (not REFRESH_DISPLAY) or (time.monotonic() - REFRESH_DISPLAY) > 15:
-        current_time = "\nThe Current Time is: " + \
-            datetime.strftime(datetime.now(), "%H:%M")
-        print(current_time)
         # Variable for storing arrival information - reset each loop
         arrival_information = json.loads('{"trains":{},"buses":{}}')
         display_information = []
@@ -250,8 +307,8 @@ while True:  # Where the magic happens
             BUS_COUNT = 0
             for bus_stop_id in bus_stop_stpids_split:
                 try:
-                    bus_api_call_to_cta(
-                        bus_stop_id, bus_stop_route_ids_split[BUS_COUNT])
+                    bus_api_call_to_cta(bus_stop_id,
+                                        bus_stop_route_ids_split[BUS_COUNT])
                     BUS_COUNT += 1
                 except:  # pylint: disable=bare-except
                     print("Error in API Call to Bus Tracker")
@@ -261,39 +318,33 @@ while True:  # Where the magic happens
         LOOP_COUNT = 0
         while LOOP_COUNT < len(cta_status):
             try:
-                DESTINATION_NAME_1 = cta_status[LOOP_COUNT]['line_and_destination']
-                LOCATION_NAME_1 = cta_status[LOOP_COUNT]['station_name']
-                ARRIVAL_MINUTES_1 = cta_status[LOOP_COUNT]['estimated_times']
+                magtag.set_text(cta_status[LOOP_COUNT]['line_and_destination'],
+                                0, False)
+                magtag.set_text(cta_status[LOOP_COUNT]['station_name'], 1,
+                                False)
+                magtag.set_text(cta_status[LOOP_COUNT]['estimated_times'], 2,
+                                False)
             except:  # pylint: disable=bare-except
-                DESTINATION_NAME_1 = ""
-                LOCATION_NAME_1 = ""
-                ARRIVAL_MINUTES_1 = ""
+                magtag.set_text("", 0, False)
+                magtag.set_text("", 1, False)
+                magtag.set_text("", 2, False)
             LOOP_COUNT += 1
             try:
-                DESTINATION_NAME_2 = cta_status[LOOP_COUNT]['line_and_destination']
-                LOCATION_NAME_2 = cta_status[LOOP_COUNT]['station_name']
-                ARRIVAL_MINUTES_2 = cta_status[LOOP_COUNT]['estimated_times']
+                magtag.set_text(cta_status[LOOP_COUNT]['line_and_destination'],
+                                3, False)
+                magtag.set_text(cta_status[LOOP_COUNT]['station_name'], 4,
+                                False)
+                magtag.set_text(cta_status[LOOP_COUNT]['estimated_times'], 5,
+                                False)
             except:  # pylint: disable=bare-except
-                DESTINATION_NAME_2 = ""
-                LOCATION_NAME_2 = ""
-                ARRIVAL_MINUTES_2 = ""
+                magtag.set_text("", 3, False)
+                magtag.set_text("", 4, False)
+                magtag.set_text("", 5, False)
             LOOP_COUNT += 1
-            if DESTINATION_NAME_1 != "":
-                print(DESTINATION_NAME_1)
-                print(LOCATION_NAME_1)
-                print(ARRIVAL_MINUTES_1)
-                print("------------------------")
-            if DESTINATION_NAME_2 != "":
-                print(DESTINATION_NAME_2)
-                print(LOCATION_NAME_2)
-                print(ARRIVAL_MINUTES_2)
-                print("------------------------")
 
-            # # Saving for later when pushed to Pi w/ e-ink display
-            # gfx.display_metro(arrival_information)
-            # gfx.update_time()
+            magtag.refresh()
 
             # Wait a respectable amount of time so the display can refresh
-            time.sleep(2)
+            time.sleep(15)
 
         REFRESH_DISPLAY = time.monotonic()
