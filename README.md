@@ -19,7 +19,7 @@ The display shows the following information:
 * Run the main program `python3 main.py`
 
 ## Configuration
-* To change the station being displayed modify the Station/Stop Information in `main.py` with the station code(s) you want to use. `Line 43, 46 and 48`
+* To change the station being displayed modify the Station/Stop Information in `main.py` with the station code(s) you want to use. `Line 39, 42 and 44`
 * 'L' Station codes can be found on the following [site](https://data.cityofchicago.org/Transportation/CTA-System-Information-List-of-L-Stops/8pix-ypme) from the City of Chicago's Data Portal.
 * Bus Stop Codes can be found using the [API](https://www.transitchicago.com/assets/1/6/cta_Bus_Tracker_API_Developer_Guide_and_Documentation_20160929.pdf) or via the Route Information Page on the Transit Chicago [site](https://www.transitchicago.com/schedules/)
 
