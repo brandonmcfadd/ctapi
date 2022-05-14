@@ -1,5 +1,3 @@
-#!/usr/bin/python
-# -*- coding:utf-8 -*-
 """ctapi by Brandon McFadden - Github: https://github.com/brandonmcfadd/ctapi"""
 import sys
 import os
