@@ -1,102 +1,34 @@
+#!/usr/bin/python
+# -*- coding:utf-8 -*-
 """ctapi by Brandon McFadden - Github: https://github.com/brandonmcfadd/ctapi"""
-import os  # Used to Load Env Var
+import sys
+import os
 import json  # Used to maintain
 import time  # Used to Get Current Time
 # Used for converting Prediction from Current Time
 from datetime import datetime, timedelta
 import xml.etree.ElementTree as ET  # Used to Parse API Response
-import adafruit_requests
-from adafruit_magtag.magtag import MagTag
-from adafruit_display_shapes.line import Line
+from dotenv import load_dotenv  # Used to Load Env Var
+import requests  # Used for API Calls
+from waveshare_epd import epd2in13_V3
+from PIL import Image, ImageDraw, ImageFont
 
-# Get wifi details and more from a secrets.py file
-try:
-    from secrets import secrets
-except ImportError:
-    print("Secrets are kept in secrets.py, please add them there!")
-    raise
+epd = epd2in13_V3.EPD()
+epd.init()
 
-magtag = MagTag()
-magtag.network.connect()
+bold_font = ImageFont.truetype(
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
+standard_font = ImageFont.truetype(
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 17)
+standard_font_small = ImageFont.truetype(
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 15)
 
-magtag.add_text(
-    text_font="/fonts/AmericanSans-Bold-14.pcf",
-    text_position=(
-        8,
-        8,
-    ),
-    text_anchor_point=(0.5, 0.5),
-    is_data=False,
-)  # Station/Stop Name 1
-
-magtag.add_text(
-    text_font="/fonts/AmericanSans-14.pcf",
-    text_position=(
-        8,
-        48,
-    ),
-    text_anchor_point=(0.5, 0.5),
-    is_data=False,
-)  # Direction 1
-
-magtag.add_text(
-    text_font="/fonts/AmericanSansItalic-12.pcf",
-    text_position=(
-        198,
-        48,
-    ),
-    text_anchor_point=(0.5, 0.5),
-    is_data=False,
-)  # Estimated Times 1
-
-magtag.append(
-    Line(0, (magtag.graphics.display.height // 2) - 1,
-         magtag.graphics.display.width,
-         (magtag.graphics.display.height // 2) - 1, 0xFF0000))
-magtag.append(
-    Line(0, (magtag.graphics.display.height // 2) - 0,
-         magtag.graphics.display.width,
-         (magtag.graphics.display.height // 2) - 0, 0xFF0000))
-magtag.append(
-    Line(0, (magtag.graphics.display.height // 2) + 1,
-         magtag.graphics.display.width,
-         (magtag.graphics.display.height // 2) + 1, 0xFF0000))
-
-magtag.add_text(
-    text_font="/fonts/AmericanSans-Bold-14.pcf",
-    text_position=(
-        8,
-        8,
-    ),
-    text_anchor_point=(0.5, 0.5),
-    is_data=False,
-)  # Station/Stop Name 2
-
-magtag.add_text(
-    text_font="/fonts/AmericanSans-14.pcf",
-    text_position=(
-        8,
-        80,
-    ),
-    text_anchor_point=(0.5, 0.5),
-    is_data=False,
-)  # Direction 2
-
-magtag.add_text(
-    text_font="/fonts/AmericanSansItalic-12.pcf",
-    text_position=(
-        198,
-        80,
-    ),
-    text_anchor_point=(0.5, 0.5),
-    is_data=False,
-)  # Estimated Times 2
-
-magtag.graphics.set_background("/bmps/background.bmp")
+# Load .env variables
+load_dotenv()
 
 # API Keys
-train_api_key = secrets["TRAIN_API_KEY"]
-bus_api_key = secrets["BUS_API_KEY"]
+train_api_key = os.getenv('TRAIN_API_KEY')
+bus_api_key = os.getenv('BUS_API_KEY')
 
 # API URL's
 TRAIN_TRACKER_URL = "http://lapi.transitchicago.com/api/1.0/ttarrivals.aspx?key={}&stpid={}"
@@ -256,7 +188,7 @@ def create_string_of_times(times):
 
 
 def information_output_to_display(arrival_information_input):
-    """Used to create structure for use when outputting data to e-ink display"""
+    """Used to create structure for use when outputting data to e-ink epd"""
     display_information_output = []
     for station in arrival_information_input['trains']:
         for train in arrival_information_input['trains'][station]:
@@ -287,8 +219,13 @@ def information_output_to_display(arrival_information_input):
 
 REFRESH_DISPLAY = None
 
+print("Welcome to TrainTracker, Python/RasPi Edition!")
 while True:  # Where the magic happens
     if (not REFRESH_DISPLAY) or (time.monotonic() - REFRESH_DISPLAY) > 15:
+        current_time_console = "The Current Time is: " + \
+            datetime.strftime(datetime.now(), "%H:%M")
+        print("\n" + current_time_console)
+
         # Variable for storing arrival information - reset each loop
         arrival_information = json.loads('{"trains":{},"buses":{}}')
         display_information = []
@@ -317,34 +254,78 @@ while True:  # Where the magic happens
 
         LOOP_COUNT = 0
         while LOOP_COUNT < len(cta_status):
+            epd.Clear(0xFF)
+            image = Image.new('1', (epd.height, epd.width),
+                              255)  # 255: clear the frame
+            draw = ImageDraw.Draw(image)
+            display = epd
+
             try:
-                magtag.set_text(cta_status[LOOP_COUNT]['line_and_destination'],
-                                0, False)
-                magtag.set_text(cta_status[LOOP_COUNT]['station_name'], 1,
-                                False)
-                magtag.set_text(cta_status[LOOP_COUNT]['estimated_times'], 2,
-                                False)
+                # Store & Draw the location 1
+                location_name_1 = cta_status[LOOP_COUNT]['station_name']
+                draw.text((1, 1), location_name_1, font=bold_font, fill=0)
+
+                # Store & Draw the destination 1
+                destination_name_1 = cta_status[LOOP_COUNT][
+                    'line_and_destination']
+                draw.text((1, 20),
+                          destination_name_1,
+                          font=standard_font,
+                          fill=0)
+
+                # Store & Draw the ETA 1
+                arrival_minutes_1 = cta_status[LOOP_COUNT]['estimated_times']
+                draw.text((1, 38),
+                          arrival_minutes_1,
+                          font=standard_font,
+                          fill=0)
             except:  # pylint: disable=bare-except
-                magtag.set_text("", 0, False)
-                magtag.set_text("", 1, False)
-                magtag.set_text("", 2, False)
-            LOOP_COUNT += 1
-            try:
-                magtag.set_text(cta_status[LOOP_COUNT]['line_and_destination'],
-                                3, False)
-                magtag.set_text(cta_status[LOOP_COUNT]['station_name'], 4,
-                                False)
-                magtag.set_text(cta_status[LOOP_COUNT]['estimated_times'], 5,
-                                False)
-            except:  # pylint: disable=bare-except
-                magtag.set_text("", 3, False)
-                magtag.set_text("", 4, False)
-                magtag.set_text("", 5, False)
+                destination_name_1 = ""
+                location_name_1 = ""
+                arrival_minutes_1 = ""
             LOOP_COUNT += 1
 
-            magtag.refresh()
+            draw.line((0, 61, 250, 61), fill=0, width=3)
 
-            # Wait a respectable amount of time so the display can refresh
-            time.sleep(15)
+            try:
+                # Store & Draw the location 1
+                location_name_2 = cta_status[LOOP_COUNT]['station_name']
+                draw.text((1, 65), location_name_2, font=bold_font, fill=0)
+
+                # Store & Draw the destination 1
+                destination_name_2 = cta_status[LOOP_COUNT][
+                    'line_and_destination']
+                draw.text((1, 84),
+                          destination_name_2,
+                          font=standard_font,
+                          fill=0)
+
+                # Store & Draw the ETA 1
+                arrival_minutes_2 = cta_status[LOOP_COUNT]['estimated_times']
+                draw.text((1, 102),
+                          arrival_minutes_2,
+                          font=standard_font,
+                          fill=0)
+            except:  # pylint: disable=bare-except
+                destination_name_2 = ""
+                location_name_2 = ""
+                arrival_minutes_2 = ""
+            LOOP_COUNT += 1
+            if destination_name_1 != "":
+                print(destination_name_1)
+                print(location_name_1)
+                print(arrival_minutes_1)
+                print("------------------------")
+            if destination_name_2 != "":
+                print(destination_name_2)
+                print(location_name_2)
+                print(arrival_minutes_2)
+                print("------------------------")
+
+            # Send to Display
+            epd.display(epd.getbuffer(image))
+
+            # Wait a respectable amount of time so the epd can refresh
+            time.sleep(9)
 
         REFRESH_DISPLAY = time.monotonic()
