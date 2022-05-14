@@ -1,7 +1,10 @@
 # ctapi (CTA on a Raspberry Pi)
 
 ## Overview
-This project is used to display the nearest train at a specific L stop in Chicao, IL. The project runs on a Raspberry Pi and the display used is the [Waveshare 2.13inch e-Paper HAT](https://www.waveshare.com/wiki/2.13inch_e-Paper_HAT).
+This project is used to display the nearest train at a specific L stop in Chicao, IL. 
+
+## Equipment
+The project runs on a [Raspberry Pi 4b](https://shop.pimoroni.com/products/raspberry-pi-4?variant=39576373690451) and the display used is the [Waveshare 2.13inch e-Paper HAT](https://www.waveshare.com/wiki/2.13inch_e-Paper_HAT).
 
 The display shows the following information:
 * Station or Stop Name - example(s) being "Logan Square"
