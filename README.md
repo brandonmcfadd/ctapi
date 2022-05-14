@@ -6,7 +6,8 @@ This project is used to display the nearest train at a specific L stop in Chicao
 ## Equipment
 The project runs on a [Raspberry Pi 4b](https://shop.pimoroni.com/products/raspberry-pi-4?variant=39576373690451) and the display used is the [Waveshare 2.13inch e-Paper HAT](https://www.waveshare.com/wiki/2.13inch_e-Paper_HAT).
 
-The display shows the following information:
+## Display Output
+The display shows the following information when the program is running:
 * Station or Stop Name - example(s) being "Logan Square"
 * Line & Destination of the train - example(s) being "Blue to O'Hare" & "Blue to Forrest Park"
 * The arrival time of the nearest trains or buses - example being "7min, 16min"
@@ -27,6 +28,5 @@ The display shows the following information:
 * Bus Stop Codes can be found using the [API](https://www.transitchicago.com/assets/1/6/cta_Bus_Tracker_API_Developer_Guide_and_Documentation_20160929.pdf) or via the Route Information Page on the Transit Chicago [site](https://www.transitchicago.com/schedules/)
 
 ## Example
-
 ![ctapi](./images/IMG_2378.jpg)
 ![ctapi](./images/IMG_2379.jpg)
