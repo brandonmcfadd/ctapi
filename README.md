@@ -3,7 +3,7 @@
 ## Overview
 This project is used to display the nearest train at a specific L stop in Chicao, IL. The project runs on a Raspberry Pi and the display used is the [Adafruit MagTag - 2.9" Grayscale E-Ink WiFi Display](https://www.adafruit.com/product/4800).
 
-The display shows the following information (image coming soon): 
+The display shows the following information (image coming soon):
 * Station or Stop Name - example(s) being "Logan Square"
 * Line & Destination of the train - example(s) being "Blue to O'Hare" & "Blue to Forrest Park"
 * The current time - example being "HH:mm"
@@ -16,7 +16,7 @@ The display shows the following information (image coming soon):
 * Create a virtual environment to work in `python3 -m venv .`
 * Activate the virtual environment `source bin/activate`
 * Install the required dependencies `pip install -r requirements.txt`
-* Create a file named `.env` in your directory with the following content 
+* Create a file named `.env` in your directory with the following content
     <br>`TRAIN_API_KEY = 'YOUR_TRANSIT_API_KEY'`
     <br>`BUS_API_KEY = 'YOUR_TRANSIT_API_KEY'` (optional)
 * Run the main program `python3 main.py`
@@ -27,4 +27,6 @@ The display shows the following information (image coming soon):
 * Bus Stop Codes can be found using the [API](https://www.transitchicago.com/assets/1/6/cta_Bus_Tracker_API_Developer_Guide_and_Documentation_20160929.pdf) or via the Route Information Page on the Transit Chicago [site](https://www.transitchicago.com/schedules/)
 
 ## Example
-* coming soon
+
+![ctapi](./images/IMG_2378.jpg)
+![ctapi](./images/IMG_2379.jpg)
