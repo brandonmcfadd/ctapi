@@ -1,5 +1,4 @@
 """ctapi by Brandon McFadden - Github: https://github.com/brandonmcfadd/ctapi"""
-import sys
 import os
 import json  # Used to maintain
 import time  # Used to Get Current Time
@@ -260,64 +259,64 @@ while True:  # Where the magic happens
 
             try:
                 # Store & Draw the location 1
-                location_name_1 = cta_status[LOOP_COUNT]['station_name']
-                draw.text((1, 1), location_name_1, font=bold_font, fill=0)
+                LOCATION_NAME_1 = cta_status[LOOP_COUNT]['station_name']
+                draw.text((1, 1), LOCATION_NAME_1, font=bold_font, fill=0)
 
                 # Store & Draw the destination 1
-                destination_name_1 = cta_status[LOOP_COUNT][
+                DESTINATION_NAME_1 = cta_status[LOOP_COUNT][
                     'line_and_destination']
                 draw.text((1, 20),
-                          destination_name_1,
+                          DESTINATION_NAME_1,
                           font=standard_font,
                           fill=0)
 
                 # Store & Draw the ETA 1
-                arrival_minutes_1 = cta_status[LOOP_COUNT]['estimated_times']
+                ARRIVAL_MINUTES_1 = cta_status[LOOP_COUNT]['estimated_times']
                 draw.text((1, 38),
-                          arrival_minutes_1,
+                          ARRIVAL_MINUTES_1,
                           font=standard_font,
                           fill=0)
             except:  # pylint: disable=bare-except
-                destination_name_1 = ""
-                location_name_1 = ""
-                arrival_minutes_1 = ""
+                DESTINATION_NAME_1 = ""
+                LOCATION_NAME_1 = ""
+                ARRIVAL_MINUTES_1 = ""
             LOOP_COUNT += 1
 
             draw.line((0, 61, 250, 61), fill=0, width=3)
 
             try:
                 # Store & Draw the location 1
-                location_name_2 = cta_status[LOOP_COUNT]['station_name']
-                draw.text((1, 65), location_name_2, font=bold_font, fill=0)
+                LOCATION_NAME_2 = cta_status[LOOP_COUNT]['station_name']
+                draw.text((1, 65), LOCATION_NAME_2, font=bold_font, fill=0)
 
                 # Store & Draw the destination 1
-                destination_name_2 = cta_status[LOOP_COUNT][
+                DESTINATION_NAME_2 = cta_status[LOOP_COUNT][
                     'line_and_destination']
                 draw.text((1, 84),
-                          destination_name_2,
+                          DESTINATION_NAME_2,
                           font=standard_font,
                           fill=0)
 
                 # Store & Draw the ETA 1
-                arrival_minutes_2 = cta_status[LOOP_COUNT]['estimated_times']
+                ARRIVAL_MINUTES_2 = cta_status[LOOP_COUNT]['estimated_times']
                 draw.text((1, 102),
-                          arrival_minutes_2,
+                          ARRIVAL_MINUTES_2,
                           font=standard_font,
                           fill=0)
             except:  # pylint: disable=bare-except
-                destination_name_2 = ""
-                location_name_2 = ""
-                arrival_minutes_2 = ""
+                DESTINATION_NAME_2 = ""
+                LOCATION_NAME_2 = ""
+                ARRIVAL_MINUTES_2 = ""
             LOOP_COUNT += 1
-            if destination_name_1 != "":
-                print(destination_name_1)
-                print(location_name_1)
-                print(arrival_minutes_1)
+            if DESTINATION_NAME_1 != "":
+                print(DESTINATION_NAME_1)
+                print(LOCATION_NAME_1)
+                print(ARRIVAL_MINUTES_1)
                 print("------------------------")
-            if destination_name_2 != "":
-                print(destination_name_2)
-                print(location_name_2)
-                print(arrival_minutes_2)
+            if DESTINATION_NAME_2 != "":
+                print(DESTINATION_NAME_2)
+                print(LOCATION_NAME_2)
+                print(ARRIVAL_MINUTES_2)
                 print("------------------------")
 
             # Send to Display
