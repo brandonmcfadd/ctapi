@@ -1,4 +1,5 @@
 """ctapi by Brandon McFadden - Github: https://github.com/brandonmcfadd/ctapi"""
+import math
 import os
 import json
 import textwrap
@@ -71,7 +72,7 @@ def train_api_call_to_cta(stop_id):
     print("Making CTA Train API Call...")
     api_response = requests.get(
         TRAIN_TRACKER_URL.format(train_api_key, stop_id))
-    train_eta_times(parse_api_response(api_response))
+    train_arrival_times(parse_api_response(api_response))
     return api_response
 
 
@@ -108,7 +109,13 @@ def get_latest_cta_tweet():
     api_response = requests.get(TWITTER_TWEETS_URL.format(cta_user_id),
                                 headers=headers)
     tweets_json = json.loads(api_response.content)
-    latest_tweet = tweets_json["data"][0]["text"]
+    tweet_counter = 0
+    found_tweet = False
+    # All status Tweets start with an Open Bracket - Hoping to filter out some of the other garbage
+    while found_tweet is False:
+        found_tweet = str(tweets_json["data"][tweet_counter]["text"]).startswith('[')
+        latest_tweet = tweets_json["data"][tweet_counter]["text"]
+        tweet_counter += 1
     return latest_tweet
 
 
@@ -162,7 +169,7 @@ def add_bus_stop_to_json(prd, stop_id):
     arrival_information["buses"][stop_id] = stop_information
 
 
-def train_eta_times(train_api_response):
+def train_arrival_times(train_api_response):
     """Takes each Train ETA (if exists) and appends to list"""
     for eta in train_api_response.iter('eta'):
         train_stop_id = eta.find('destNm').text
@@ -180,15 +187,26 @@ def train_eta_times(train_api_response):
 
 def add_train_eta_to_array(eta, station_name, stop_id):
     """Parses API Result from Train Tracker API and adds ETA's to a list"""
-    if eta.find('isApp').text == "1":
-        arrival_information["trains"][station_name][stop_id][
-            "estimated_times"].append("Due")
+    if eta.find('isSch').text == "0":
+        if eta.find('isApp').text == "1":
+            arrival_information["trains"][station_name][stop_id][
+                "estimated_times"].append("Due+")
+        else:
+            prediction = eta.find('prdt').text
+            arrival = eta.find('arrT').text
+            estimated_time = str(minutes_between(prediction, arrival))
+            (arrival_information["trains"][station_name][stop_id]
+            ["estimated_times"].append(estimated_time + "min+"))
     else:
-        prediction = eta.find('prdt').text
-        arrival = eta.find('arrT').text
-        estimated_time = str(minutes_between(prediction, arrival))
-        (arrival_information["trains"][station_name][stop_id]
-         ["estimated_times"].append(estimated_time + "min"))
+        if eta.find('isApp').text == "1":
+            arrival_information["trains"][station_name][stop_id][
+                "estimated_times"].append("Due-")
+        else:
+            prediction = eta.find('prdt').text
+            arrival = eta.find('arrT').text
+            estimated_time = str(minutes_between(prediction, arrival))
+            (arrival_information["trains"][station_name][stop_id]
+            ["estimated_times"].append(estimated_time + "min-"))
 
 
 def bus_eta_times(bus_api_response):
@@ -250,6 +268,7 @@ def divvy_process_station_stats(station_stats, station_information):
 def create_string_of_items(items):
     """Takes each item from list and builds a useable string"""
     string_count = 0
+    string = ""
     for item in items:
         if string_count == 0:
             string = item
@@ -290,23 +309,35 @@ def information_output_to_display(arrival_information_input):
                      " Line to " + arrival_information['trains'][station]
                      [train]['destination_name']),
                     'line_3':
-                    "No Scheduled Service",
+                    "No arrivals found :(",
                     'item_type':
                     "train",
                 })
 
     for bus in arrival_information['buses']:
-        display_information_output.append({
-            'line_1':
-            arrival_information['buses'][bus]["stop_name"],
-            'line_2':
-            arrival_information['buses'][bus]["full_name"],
-            'line_3':
-            create_string_of_items(
-                arrival_information['buses'][bus]["estimated_times"]),
-            'item_type':
-            "bus"
-        })
+        try:
+            display_information_output.append({
+                'line_1':
+                arrival_information['buses'][bus]["stop_name"],
+                'line_2':
+                arrival_information['buses'][bus]["full_name"],
+                'line_3':
+                create_string_of_items(
+                    arrival_information['buses'][bus]["estimated_times"]),
+                'item_type':
+                "bus"
+            })
+        except: # pylint: disable=bare-except
+            display_information_output.append({
+                'line_1':
+                arrival_information['buses'][bus]["stop_name"],
+                'line_2':
+                arrival_information['buses'][bus]["full_name"],
+                'line_3':
+                    "No arrivals found :(",
+                'item_type':
+                "bus"
+            })
         arrival_information['buses'][bus]["estimated_times"] = []
 
     for station in arrival_information["bicycles"]:
@@ -417,13 +448,14 @@ def information_to_display(status):
 
 def tweet_to_display():
     """Used to output the latest CTA Tweet to the Display"""
-    printed_lines = 0
     corner_image_size = (25, 25)
     tweet_text = textwrap.wrap(get_latest_cta_tweet(), width=25)
     icon_twitter = Image.open("/home/pi/ctapi/icons/twitter.png")
-    print(len(tweet_text))
+    tweet_length = len(tweet_text)
+    current_tweet_page = 1
+    total_tweet_pages = math.ceil(tweet_length / 4)
+    printed_lines = 0
     while printed_lines != len(tweet_text) and ENABLE_TWITTER_LOOKUP is True:
-        print(printed_lines)
         twitter_image = Image.new('1', (epd.height, epd.width),
                                   255)  # 255: clear the frame
         twitter_draw = ImageDraw.Draw(twitter_image)
@@ -458,6 +490,13 @@ def tweet_to_display():
             tweet_line_5 = ""
         icon_twitter = icon_twitter.resize(corner_image_size)
         twitter_image.paste(icon_twitter, (225, 97))
+        try:
+            tweet_line_6 = "Page " + str(current_tweet_page) + " / " + str(total_tweet_pages)
+            twitter_draw.text((0, 100), tweet_line_6, font=tweet_font, fill=0)
+        except:  # pylint: disable=bare-except
+            tweet_line_6 = ""
+        icon_twitter = icon_twitter.resize(corner_image_size)
+        twitter_image.paste(icon_twitter, (225, 97))
 
         if tweet_line_1 != "":
             print(tweet_line_1)
@@ -465,6 +504,9 @@ def tweet_to_display():
             print(tweet_line_3)
             print(tweet_line_4)
             print(tweet_line_5)
+            print(tweet_line_6)
+
+        current_tweet_page += 1
 
         # Send to Display
         epd.display(epd.getbuffer(twitter_image))
