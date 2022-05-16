@@ -1,8 +1,6 @@
 # ctapi (Chicago Transit Authority ("CTA") on a Raspberry Pi)
 
 ## Overview
-This project is used to display the nearest train at a specific L stop in Chicao, IL. 
-=======
 This project is used to display the nearest train at a specific L stop, the nearest bus at the Bus Stops, Close By Divvy Bike station status and the latest Tweets from CTA. The project runs on a Raspberry Pi and the display used is the [Waveshare 2.13inch e-Paper HAT](https://www.waveshare.com/wiki/2.13inch_e-Paper_HAT).
 
 ## Equipment
