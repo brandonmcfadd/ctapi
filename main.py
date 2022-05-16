@@ -1,10 +1,13 @@
 """ctapi by Brandon McFadden - Github: https://github.com/brandonmcfadd/ctapi"""
 import os
-import json  # Used to maintain
+import json
+import textwrap
 import time  # Used to Get Current Time
+import xml.etree.ElementTree as ET  # Used to Parse API Response
+import re
 # Used for converting Prediction from Current Time
 from datetime import datetime, timedelta
-import xml.etree.ElementTree as ET  # Used to Parse API Response
+from geopy import distance
 from dotenv import load_dotenv  # Used to Load Env Var
 import requests  # Used for API Calls
 from waveshare_epd import epd2in13_V3
@@ -12,40 +15,60 @@ from PIL import Image, ImageDraw, ImageFont
 
 epd = epd2in13_V3.EPD()
 epd.init()
+epd.Clear(0xFF)
 
 bold_font = ImageFont.truetype(
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
 standard_font = ImageFont.truetype(
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 17)
 standard_font_small = ImageFont.truetype(
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 15)
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+tweet_font = ImageFont.truetype(
+    "/usr/share/fonts/truetype/dejavu/DejaVuSerifCondensed-Bold.ttf", 17)
 
 # Load .env variables
 load_dotenv()
 
-# API Keys
+# ENV Variables
 train_api_key = os.getenv('TRAIN_API_KEY')
 bus_api_key = os.getenv('BUS_API_KEY')
+twitter_api_key = os.getenv('TWITTER_API_KEY')
+home_latitude = os.getenv('HOME_LATITUDE')
+home_longitude = os.getenv('HOME_LONGITUDE')
 
 # API URL's
 TRAIN_TRACKER_URL = "http://lapi.transitchicago.com/api/1.0/ttarrivals.aspx?key={}&stpid={}"
 BUS_TRACKER_URL = "http://www.ctabustracker.com/bustime/api/v2/getpredictions?key={}&stpid={}&rt={}"
+DIVVY_STATION_INFORMATION_URL = "https://gbfs.divvybikes.com/gbfs/en/station_information.json"
+DIVVY_STATION_STATUS_URL = "https://gbfs.divvybikes.com/gbfs/en/station_status.json"
+TWITTER_TWEETS_URL = "https://api.twitter.com/2/users/{}/tweets"
 
 # Station/Stop Information for Trains/Buses - Bus Stop Items must contain equal number of items
 # Enter the train station #'s to lookup
+ENABLE_TRAIN_TRACKER = True  # Enter True or False to Enable or Disable Train Portion
 TRAIN_STATION_STOP_IDS = "30197,30198"
 
 # Enter the bus stop #'s for the stops you want estimated times for
+ENABLE_BUS_TRACKER = True  # Enter True or False to Enable or Disable Bus Portion
 BUS_STOP_STOP_IDS = "5465,1323"
 # Enter the corresponding bus route # you want for each bus_stop_id
 BUS_STOP_ROUTE_IDS = "76,74"
 
-# Last Known Information (used if API returns no arrival times) - Updated on successful API call
-last_known_route_information = json.loads('{"trains":{},"buses":{}}')
+# Enter the Divvy station #'s to lookup
+ENABLE_DIVVY_STATION_CHECK = True  # Enter True or False to Enable or Disable Divvy Portion
+DIVVY_STATION_IDS = "a3a9607f-a135-11e9-9cda-0a87ae2ba916,a3b01578-a135-11e9-9cda-0a87ae2ba916"
+
+# Twitter Lookup
+ENABLE_TWITTER_LOOKUP = True
+
+# Setting Up Variable for Storing Station Information - Will keep stations long turn
+arrival_information = json.loads('{"trains":{},"buses":{},"bicycles":{}}')
+REFRESH_DISPLAY = None
 
 
 def train_api_call_to_cta(stop_id):
     """Gotta talk to the CTA and get Train Times"""
+    print("Making CTA Train API Call...")
     api_response = requests.get(
         TRAIN_TRACKER_URL.format(train_api_key, stop_id))
     train_eta_times(parse_api_response(api_response))
@@ -54,10 +77,39 @@ def train_api_call_to_cta(stop_id):
 
 def bus_api_call_to_cta(stop_code, route_code):
     """Gotta talk to the CTA and get Bus Times"""
+    print("Making CTA Bus API Call...")
     api_response = requests.get(
         BUS_TRACKER_URL.format(bus_api_key, stop_code, route_code))
     bus_eta_times(parse_api_response(api_response))
     return api_response
+
+
+def divvy_api_call_station_information():
+    """Gotta talk to the Divvy and get Station Status"""
+    print("Making Divvy Station Information API Call...")
+    api_response = requests.get(DIVVY_STATION_INFORMATION_URL)
+    station_json = json.loads(api_response.content)
+    return station_json
+
+
+def divvy_api_call_station_status():
+    """Gotta talk to the Divvy and get Station Status"""
+    print("Making Divvy Station Stats API Call...")
+    api_response = requests.get(DIVVY_STATION_STATUS_URL)
+    station_json = json.loads(api_response.content)
+    return station_json
+
+
+def get_latest_cta_tweet():
+    """Get the latest problems accoring to CTA Twitter"""
+    print("Making Twitter API Call...")
+    headers = {"Authorization": twitter_api_key}
+    cta_user_id = "342782636"
+    api_response = requests.get(TWITTER_TWEETS_URL.format(cta_user_id),
+                                headers=headers)
+    tweets_json = json.loads(api_response.content)
+    latest_tweet = tweets_json["data"][0]["text"]
+    return latest_tweet
 
 
 def parse_api_response(api_response_input):
@@ -79,31 +131,26 @@ def add_train_station_to_json(station_name):
     """Function is called if a new station is identified per API Call"""
     station_information = {}
     arrival_information["trains"][station_name] = station_information
-    last_known_route_information["trains"][station_name] = station_information
+    # persistent_station_tracking["trains"][station_name] = station_information
 
 
 def add_train_stop_to_json(eta, stop_id):
     """Function is called if a new train stop is identified per API Call"""
     stop_information = {}
-    last_known_info = {}
     station_name = eta.find('staNm').text
 
-    last_known_info["name"] = eta.find(
-        'rt').text + " Line towards " + eta.find('destNm').text
     stop_information["full_name"] = eta.find(
         'rt').text + " Line towards " + eta.find('destNm').text
     stop_information["destination_name"] = eta.find('destNm').text
     stop_information["route"] = eta.find('rt').text
     stop_information["estimated_times"] = []
 
-    last_known_route_information["trains"][station_name] = last_known_info
     arrival_information["trains"][station_name][stop_id] = stop_information
 
 
 def add_bus_stop_to_json(prd, stop_id):
     """Function is called if a new bus stop is identified per API Call"""
     stop_information = {}
-    last_known_info = {}
 
     stop_information["full_name"] = prd.find(
         'rt').text + " towards " + prd.find('des').text
@@ -112,17 +159,13 @@ def add_bus_stop_to_json(prd, stop_id):
     stop_information["stop_name"] = prd.find('stpnm').text
     stop_information["estimated_times"] = []
 
-    last_known_info["name"] = prd.find('rt').text + " towards " + prd.find(
-        'des').text
-
     arrival_information["buses"][stop_id] = stop_information
-    last_known_route_information["buses"][stop_id] = last_known_info
 
 
 def train_eta_times(train_api_response):
     """Takes each Train ETA (if exists) and appends to list"""
     for eta in train_api_response.iter('eta'):
-        train_stop_id = eta.find('stpId').text
+        train_stop_id = eta.find('destNm').text
         train_station_name = eta.find('staNm').text
 
         if train_station_name not in arrival_information["trains"]:
@@ -172,10 +215,42 @@ def add_bus_eta_to_array(prd, stop_id):
             prd.find('prdctdn').text + "min"))
 
 
-def create_string_of_times(times):
-    """Takes each ETA from list and builds a useable string"""
+def divvy_process_station_stats(station_stats, station_information):
+    """Takes Station Information and Stats from API Call and gets needed information"""
+    to_replace = {" St": '', " Rd": "", " Ave": ""}
+    for station in station_information['data']['stations']:
+        station_id = station['station_id']
+        if station_id in DIVVY_STATION_IDS:
+            found_station_information = {}
+            station_distance_long = distance.distance(
+                (home_latitude, home_longitude),
+                (station['lat'], station['lon'])).miles
+            station_distance_short = str(round(station_distance_long,
+                                               2)) + "mi"
+            for key, value in to_replace.items():
+                station_name = re.sub(r"\b" + key + r"\b", value,
+                                      station['name'])
+            found_station_information["station_name"] = station_name
+            found_station_information["capacity"] = str(station['capacity'])
+            found_station_information["distance"] = station_distance_short
+            found_station_information["bike_numbers"] = []
+            arrival_information["bicycles"][
+                station['station_id']] = found_station_information
+
+    for station in station_stats['data']['stations']:
+        if station['station_id'] in DIVVY_STATION_IDS:
+            arrival_information["bicycles"][
+                station['station_id']]["bike_numbers"].append(
+                    str(station['num_ebikes_available']) + " ebikes")
+            arrival_information["bicycles"][
+                station['station_id']]["bike_numbers"].append(
+                    str(station['num_bikes_available']) + " classic")
+
+
+def create_string_of_items(items):
+    """Takes each item from list and builds a useable string"""
     string_count = 0
-    for item in times:
+    for item in items:
         if string_count == 0:
             string = item
             string_count += 1
@@ -189,53 +264,232 @@ def information_output_to_display(arrival_information_input):
     display_information_output = []
     for station in arrival_information_input['trains']:
         for train in arrival_information_input['trains'][station]:
-            display_information_output.append({
-                'station_name':
-                station,
-                'line_and_destination':
-                (arrival_information['trains'][station][train]['route'] +
-                 " Line to " + arrival_information['trains'][station][train]
-                 ['destination_name']),
-                'estimated_times':
-                create_string_of_times(arrival_information['trains'][station]
-                                       [train]["estimated_times"])
-            })
+            try:
+                display_information_output.append({
+                    'line_1':
+                    station,
+                    'line_2':
+                    (arrival_information['trains'][station][train]['route'] +
+                     " Line to " + arrival_information['trains'][station]
+                     [train]['destination_name']),
+                    'line_3':
+                    create_string_of_items(
+                        arrival_information['trains'][station][train]
+                        ["estimated_times"]),
+                    'item_type':
+                    "train",
+                })
+                arrival_information['trains'][station][train][
+                    "estimated_times"] = []
+            except:  # pylint: disable=bare-except
+                display_information_output.append({
+                    'line_1':
+                    station,
+                    'line_2':
+                    (arrival_information['trains'][station][train]['route'] +
+                     " Line to " + arrival_information['trains'][station]
+                     [train]['destination_name']),
+                    'line_3':
+                    "No Scheduled Service",
+                    'item_type':
+                    "train",
+                })
 
     for bus in arrival_information['buses']:
         display_information_output.append({
-            'station_name':
+            'line_1':
             arrival_information['buses'][bus]["stop_name"],
-            'line_and_destination':
+            'line_2':
             arrival_information['buses'][bus]["full_name"],
-            'estimated_times':
-            create_string_of_times(
-                arrival_information['buses'][bus]["estimated_times"])
+            'line_3':
+            create_string_of_items(
+                arrival_information['buses'][bus]["estimated_times"]),
+            'item_type':
+            "bus"
         })
+        arrival_information['buses'][bus]["estimated_times"] = []
+
+    for station in arrival_information["bicycles"]:
+        display_information_output.append({
+            'line_1':
+            str(arrival_information["bicycles"][station]
+                ["station_name"]).replace("Ave", ""),
+            'line_2':
+            "Distance: " +
+            arrival_information["bicycles"][station]["distance"],
+            'line_3':
+            create_string_of_items(
+                arrival_information["bicycles"][station]["bike_numbers"]),
+            'item_type':
+            "bicycle"
+        })
+        arrival_information["bicycles"][station]["bike_numbers"] = []
     return display_information_output
 
 
-REFRESH_DISPLAY = None
+def information_to_display(status):
+    """Used to create structure for use when outputting data to e-ink epd"""
+    icon_bus = Image.open("/home/pi/ctapi/icons/bus_live.png")
+    icon_train = Image.open("/home/pi/ctapi/icons/train_live.png")
+    icon_bicycle = Image.open("/home/pi/ctapi/icons/bicycle.png")
+    corner_image_size = (25, 25)
+    loop_count = 0
+    while loop_count < len(status):
+        image = Image.new('1', (epd.height, epd.width),
+                            255)  # 255: clear the frame
+        draw = ImageDraw.Draw(image)
+
+        try:
+            # Store & Draw the location 1
+            item_1_line_1 = status[loop_count]['line_1']
+            draw.text((1, 1), item_1_line_1, font=bold_font, fill=0)
+
+            # Store & Draw the destination 1
+            item_1_line_2 = status[loop_count]['line_2']
+            draw.text((1, 20), item_1_line_2, font=standard_font, fill=0)
+
+            # Store & Draw the ETA 1
+            item_1_line_3 = status[loop_count]['line_3']
+            draw.text((1, 38), item_1_line_3, font=standard_font, fill=0)
+
+            if status[loop_count]['item_type'] == "train":
+                icon_train_resized = icon_train.resize(corner_image_size)
+                image.paste(icon_train_resized, (225, 35))
+            elif status[loop_count]['item_type'] == "bus":
+                icon_bus_resized = icon_bus.resize(corner_image_size)
+                image.paste(icon_bus_resized, (225, 35))
+            elif status[loop_count]['item_type'] == "bicycle":
+                icon_bicycle_resized = icon_bicycle.resize(corner_image_size)
+                image.paste(icon_bicycle_resized, (225, 35))
+        except:  # pylint: disable=bare-except
+            item_1_line_1 = ""
+            item_1_line_2 = ""
+            item_1_line_3 = ""
+        loop_count += 1
+
+        draw.line((0, 61, 250, 61), fill=0, width=3)
+
+        try:
+            # Store & Draw the location 1
+            item_2_line_1 = status[loop_count]['line_1']
+            draw.text((1, 65), item_2_line_1, font=bold_font, fill=0)
+
+            # Store & Draw the destination 1
+            item_2_line_2 = status[loop_count]['line_2']
+            draw.text((1, 84), item_2_line_2, font=standard_font, fill=0)
+
+            # Store & Draw the ETA 1
+            item_2_line_3 = status[loop_count]['line_3']
+            draw.text((1, 102), item_2_line_3, font=standard_font, fill=0)
+
+            if status[loop_count]['item_type'] == "train":
+                icon_train_resized = icon_train.resize(corner_image_size)
+                image.paste(icon_train_resized, (225, 97))
+            elif status[loop_count]['item_type'] == "bus":
+                icon_bus_resized = icon_bus.resize(corner_image_size)
+                image.paste(icon_bus_resized, (225, 97))
+            elif status[loop_count]['item_type'] == "bicycle":
+                icon_bicycle_resized = icon_bicycle.resize(corner_image_size)
+                image.paste(icon_bicycle_resized, (225, 97))
+        except:  # pylint: disable=bare-except
+            item_2_line_1 = ""
+            item_2_line_2 = ""
+            item_2_line_3 = ""
+        loop_count += 1
+        if item_1_line_1 != "":
+            print(item_1_line_1)
+            print(item_1_line_2)
+            print(item_1_line_3)
+            print("------------------------")
+        if item_2_line_1 != "":
+            print(item_2_line_1)
+            print(item_2_line_2)
+            print(item_2_line_3)
+            print("------------------------")
+
+        # Send to Display
+        epd.display(epd.getbuffer(image))
+
+        # Wait a respectable amount of time so the display can refresh
+        print("Sleeping 5 Seconds")
+        time.sleep(5)
+
+
+def tweet_to_display():
+    """Used to output the latest CTA Tweet to the Display"""
+    printed_lines = 0
+    corner_image_size = (25, 25)
+    tweet_text = textwrap.wrap(get_latest_cta_tweet(), width=25)
+    icon_twitter = Image.open("/home/pi/ctapi/icons/twitter.png")
+    print(len(tweet_text))
+    while printed_lines != len(tweet_text) and ENABLE_TWITTER_LOOKUP is True:
+        print(printed_lines)
+        twitter_image = Image.new('1', (epd.height, epd.width),
+                                  255)  # 255: clear the frame
+        twitter_draw = ImageDraw.Draw(twitter_image)
+        # Store & Draw the header
+        tweet_line_1 = "Latest Tweet from @CTA"
+        twitter_draw.text((0, 0), tweet_line_1, font=bold_font, fill=0)
+
+        # Store & Draw Tweet
+        try:
+            tweet_line_2 = tweet_text[printed_lines]
+            printed_lines += 1
+            twitter_draw.text((0, 20), tweet_line_2, font=tweet_font, fill=0)
+        except:  # pylint: disable=bare-except
+            tweet_line_2 = ""
+        try:
+            tweet_line_3 = tweet_text[printed_lines]
+            printed_lines += 1
+            twitter_draw.text((0, 40), tweet_line_3, font=tweet_font, fill=0)
+        except:  # pylint: disable=bare-except
+            tweet_line_3 = ""
+        try:
+            tweet_line_4 = tweet_text[printed_lines]
+            printed_lines += 1
+            twitter_draw.text((0, 60), tweet_line_4, font=tweet_font, fill=0)
+        except:  # pylint: disable=bare-except
+            tweet_line_4 = ""
+        try:
+            tweet_line_5 = tweet_text[printed_lines]
+            printed_lines += 1
+            twitter_draw.text((0, 80), tweet_line_5, font=tweet_font, fill=0)
+        except:  # pylint: disable=bare-except
+            tweet_line_5 = ""
+        icon_twitter = icon_twitter.resize(corner_image_size)
+        twitter_image.paste(icon_twitter, (225, 97))
+
+        if tweet_line_1 != "":
+            print(tweet_line_1)
+            print(tweet_line_2)
+            print(tweet_line_3)
+            print(tweet_line_4)
+            print(tweet_line_5)
+
+        # Send to Display
+        epd.display(epd.getbuffer(twitter_image))
+
+        # Wait a respectable amount of time so the display can refresh
+        print("Sleeping 5 Seconds")
+        time.sleep(5)
+
 
 print("Welcome to TrainTracker, Python/RasPi Edition!")
 while True:  # Where the magic happens
-    if (not REFRESH_DISPLAY) or (time.monotonic() - REFRESH_DISPLAY) > 15:
+    if (not REFRESH_DISPLAY) or (time.monotonic() - REFRESH_DISPLAY) > 2:
         current_time_console = "The Current Time is: " + \
             datetime.strftime(datetime.now(), "%H:%M")
         print("\n" + current_time_console)
 
-        # Variable for storing arrival information - reset each loop
-        arrival_information = json.loads('{"trains":{},"buses":{}}')
-        display_information = []
-
-        if TRAIN_STATION_STOP_IDS != "":
+        if TRAIN_STATION_STOP_IDS != "" and ENABLE_TRAIN_TRACKER is True:
             train_station_stpIds_split = TRAIN_STATION_STOP_IDS.split(',')
             for train_stop_id_to_check in train_station_stpIds_split:
-                try:
-                    response = train_api_call_to_cta(train_stop_id_to_check)
-                except:  # pylint: disable=bare-except
-                    print("Error in API Call to Train Tracker")
+                # try:
+                response = train_api_call_to_cta(train_stop_id_to_check)
+                # except:  # pylint: disable=bare-except
+                # print("Error in API Call to Train Tracker")
 
-        if BUS_STOP_STOP_IDS != "":
+        if BUS_STOP_STOP_IDS != "" and ENABLE_BUS_TRACKER is True:
             bus_stop_stpids_split = BUS_STOP_STOP_IDS.split(',')
             bus_stop_route_ids_split = BUS_STOP_ROUTE_IDS.split(',')
             BUS_COUNT = 0
@@ -247,82 +501,11 @@ while True:  # Where the magic happens
                 except:  # pylint: disable=bare-except
                     print("Error in API Call to Bus Tracker")
 
-        cta_status = information_output_to_display(arrival_information)
+        if DIVVY_STATION_IDS != "" and ENABLE_DIVVY_STATION_CHECK is True:
+            divvy_process_station_stats(divvy_api_call_station_status(),
+                                        divvy_api_call_station_information())
 
-        LOOP_COUNT = 0
-        while LOOP_COUNT < len(cta_status):
-            epd.Clear(0xFF)
-            image = Image.new('1', (epd.height, epd.width),
-                              255)  # 255: clear the frame
-            draw = ImageDraw.Draw(image)
-            display = epd
-
-            try:
-                # Store & Draw the location 1
-                LOCATION_NAME_1 = cta_status[LOOP_COUNT]['station_name']
-                draw.text((1, 1), LOCATION_NAME_1, font=bold_font, fill=0)
-
-                # Store & Draw the destination 1
-                DESTINATION_NAME_1 = cta_status[LOOP_COUNT][
-                    'line_and_destination']
-                draw.text((1, 20),
-                          DESTINATION_NAME_1,
-                          font=standard_font,
-                          fill=0)
-
-                # Store & Draw the ETA 1
-                ARRIVAL_MINUTES_1 = cta_status[LOOP_COUNT]['estimated_times']
-                draw.text((1, 38),
-                          ARRIVAL_MINUTES_1,
-                          font=standard_font,
-                          fill=0)
-            except:  # pylint: disable=bare-except
-                DESTINATION_NAME_1 = ""
-                LOCATION_NAME_1 = ""
-                ARRIVAL_MINUTES_1 = ""
-            LOOP_COUNT += 1
-
-            draw.line((0, 61, 250, 61), fill=0, width=3)
-
-            try:
-                # Store & Draw the location 1
-                LOCATION_NAME_2 = cta_status[LOOP_COUNT]['station_name']
-                draw.text((1, 65), LOCATION_NAME_2, font=bold_font, fill=0)
-
-                # Store & Draw the destination 1
-                DESTINATION_NAME_2 = cta_status[LOOP_COUNT][
-                    'line_and_destination']
-                draw.text((1, 84),
-                          DESTINATION_NAME_2,
-                          font=standard_font,
-                          fill=0)
-
-                # Store & Draw the ETA 1
-                ARRIVAL_MINUTES_2 = cta_status[LOOP_COUNT]['estimated_times']
-                draw.text((1, 102),
-                          ARRIVAL_MINUTES_2,
-                          font=standard_font,
-                          fill=0)
-            except:  # pylint: disable=bare-except
-                DESTINATION_NAME_2 = ""
-                LOCATION_NAME_2 = ""
-                ARRIVAL_MINUTES_2 = ""
-            LOOP_COUNT += 1
-            if DESTINATION_NAME_1 != "":
-                print(DESTINATION_NAME_1)
-                print(LOCATION_NAME_1)
-                print(ARRIVAL_MINUTES_1)
-                print("------------------------")
-            if DESTINATION_NAME_2 != "":
-                print(DESTINATION_NAME_2)
-                print(LOCATION_NAME_2)
-                print(ARRIVAL_MINUTES_2)
-                print("------------------------")
-
-            # Send to Display
-            epd.display(epd.getbuffer(image))
-
-            # Wait a respectable amount of time so the epd can refresh
-            time.sleep(9)
+        information_to_display(information_output_to_display(arrival_information))
+        tweet_to_display()
 
         REFRESH_DISPLAY = time.monotonic()
