@@ -11,21 +11,25 @@ from datetime import datetime, timedelta
 from geopy import distance
 from dotenv import load_dotenv  # Used to Load Env Var
 import requests  # Used for API Calls
-from waveshare_epd import epd2in13_V3
-from PIL import Image, ImageDraw, ImageFont
+# from waveshare_epd import epd2in13_V3
+# from PIL import Image, ImageDraw, ImageFont
 
-epd = epd2in13_V3.EPD()
-epd.init()
-epd.Clear(0xFF)
+# epd = epd2in13_V3.EPD()
+# epd.init()
+# epd.Clear(0xFF)
 
-bold_font = ImageFont.truetype(
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
-standard_font = ImageFont.truetype(
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 17)
-standard_font_small = ImageFont.truetype(
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
-tweet_font = ImageFont.truetype(
-    "/usr/share/fonts/truetype/dejavu/DejaVuSerifCondensed-Bold.ttf", 17)
+# bold_font = ImageFont.truetype(
+#     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
+# standard_font = ImageFont.truetype(
+#     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 17)
+# standard_font_small = ImageFont.truetype(
+#     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+# tweet_font = ImageFont.truetype(
+#     "/usr/share/fonts/truetype/dejavu/DejaVuSerifCondensed-Bold.ttf", 17)
+# icon_bus = Image.open("/home/pi/ctapi/icons/bus_live.png")
+# icon_train = Image.open("/home/pi/ctapi/icons/train_live.png")
+# icon_bicycle = Image.open("/home/pi/ctapi/icons/bicycle.png")
+corner_image_size = (25, 25)
 
 # Load .env variables
 load_dotenv()
@@ -288,7 +292,7 @@ def create_string_of_items(items):
         if string_count == 0:
             string = item
             string_count += 1
-        elif string_count > 0 and string_count <3:
+        elif string_count > 0 and string_count < 3:
             string = string + ", " + item
             string_count += 1
     return string
@@ -299,7 +303,8 @@ def information_output_to_display(arrival_information_input):
     display_information_output = []
     for station in arrival_information_input['trains']:
         for train in arrival_information_input['trains'][station]:
-            try:
+            if arrival_information['trains'][station][train][
+                    "estimated_times"] != []:
                 display_information_output.append({
                     'line_1':
                     station,
@@ -316,7 +321,7 @@ def information_output_to_display(arrival_information_input):
                 })
                 arrival_information['trains'][station][train][
                     "estimated_times"] = []
-            except:  # pylint: disable=bare-except
+            else:
                 display_information_output.append({
                     'line_1':
                     station,
@@ -331,7 +336,7 @@ def information_output_to_display(arrival_information_input):
                 })
 
     for bus in arrival_information['buses']:
-        try:
+        if arrival_information['buses'][bus]["estimated_times"] != []:
             display_information_output.append({
                 'line_1':
                 arrival_information['buses'][bus]["stop_name"],
@@ -343,7 +348,7 @@ def information_output_to_display(arrival_information_input):
                 'item_type':
                 "bus"
             })
-        except:  # pylint: disable=bare-except
+        else:
             display_information_output.append({
                 'line_1':
                 arrival_information['buses'][bus]["stop_name"],
@@ -376,38 +381,27 @@ def information_output_to_display(arrival_information_input):
 
 def information_to_display(status):
     """Used to create structure for use when outputting data to e-ink epd"""
-    icon_bus = Image.open("/home/pi/ctapi/icons/bus_live.png")
-    icon_train = Image.open("/home/pi/ctapi/icons/train_live.png")
-    icon_bicycle = Image.open("/home/pi/ctapi/icons/bicycle.png")
-    corner_image_size = (25, 25)
     loop_count = 0
     while loop_count < len(status):
-        image = Image.new('1', (epd.height, epd.width),
-                          255)  # 255: clear the frame
-        draw = ImageDraw.Draw(image)
+        # image = Image.new('1', (epd.height, epd.width),
+        #                   255)  # 255: clear the frame
+        # draw = ImageDraw.Draw(image)
 
         try:
-            if status[loop_count]['item_type'] == "train":
-                icon_train_resized = icon_train.resize(corner_image_size)
-                image.paste(icon_train_resized, (225, 35))
-            elif status[loop_count]['item_type'] == "bus":
-                icon_bus_resized = icon_bus.resize(corner_image_size)
-                image.paste(icon_bus_resized, (225, 35))
-            elif status[loop_count]['item_type'] == "bicycle":
-                icon_bicycle_resized = icon_bicycle.resize(corner_image_size)
-                image.paste(icon_bicycle_resized, (225, 35))
+            # image.paste(get_logo_for_display(status[loop_count]['item_type']),
+            #             (225, 35))
 
             # Store & Draw the location 1
             item_1_line_1 = status[loop_count]['line_1']
-            draw.text((1, 1), item_1_line_1, font=bold_font, fill=0)
+            # draw.text((1, 1), item_1_line_1, font=bold_font, fill=0)
 
             # Store & Draw the destination 1
             item_1_line_2 = status[loop_count]['line_2']
-            draw.text((1, 20), item_1_line_2, font=standard_font, fill=0)
+            # draw.text((1, 20), item_1_line_2, font=standard_font, fill=0)
 
             # Store & Draw the ETA 1
             item_1_line_3 = status[loop_count]['line_3']
-            draw.text((1, 38), item_1_line_3, font=standard_font, fill=0)
+            # draw.text((1, 38), item_1_line_3, font=standard_font, fill=0)
 
         except:  # pylint: disable=bare-except
             item_1_line_1 = ""
@@ -415,127 +409,116 @@ def information_to_display(status):
             item_1_line_3 = ""
         loop_count += 1
 
-        draw.line((0, 61, 250, 61), fill=0, width=3)
+        # draw.line((0, 61, 250, 61), fill=0, width=3)
 
         try:
-            if status[loop_count]['item_type'] == "train":
-                icon_train_resized = icon_train.resize(corner_image_size)
-                image.paste(icon_train_resized, (225, 97))
-            elif status[loop_count]['item_type'] == "bus":
-                icon_bus_resized = icon_bus.resize(corner_image_size)
-                image.paste(icon_bus_resized, (225, 97))
-            elif status[loop_count]['item_type'] == "bicycle":
-                icon_bicycle_resized = icon_bicycle.resize(corner_image_size)
-                image.paste(icon_bicycle_resized, (225, 97))
+            # image.paste(get_logo_for_display(status[loop_count]['item_type']),
+                        # (225, 97))
 
             # Store & Draw the location 1
             item_2_line_1 = status[loop_count]['line_1']
-            draw.text((1, 65), item_2_line_1, font=bold_font, fill=0)
+            # draw.text((1, 65), item_2_line_1, font=bold_font, fill=0)
 
             # Store & Draw the destination 1
             item_2_line_2 = status[loop_count]['line_2']
-            draw.text((1, 84), item_2_line_2, font=standard_font, fill=0)
+            # draw.text((1, 84), item_2_line_2, font=standard_font, fill=0)
 
             # Store & Draw the ETA 1
             item_2_line_3 = status[loop_count]['line_3']
-            draw.text((1, 102), item_2_line_3, font=standard_font, fill=0)
+            # draw.text((1, 102), item_2_line_3, font=standard_font, fill=0)
         except:  # pylint: disable=bare-except
             item_2_line_1 = ""
             item_2_line_2 = ""
             item_2_line_3 = ""
         loop_count += 1
-        if item_1_line_1 != "":
-            print(item_1_line_1)
-            print(item_1_line_2)
-            print(item_1_line_3)
-            print("------------------------")
-        if item_2_line_1 != "":
-            print(item_2_line_1)
-            print(item_2_line_2)
-            print(item_2_line_3)
-            print("------------------------")
+        print(item_1_line_1, "\n", item_1_line_2, "\n", item_1_line_3, "\n",
+              "------------------------", "\n", item_2_line_1, "\n",
+              item_2_line_2, "\n", item_2_line_3, "\n",
+              "------------------------")
 
         # Send to Display
-        epd.display(epd.getbuffer(image))
+        # epd.display(epd.getbuffer(image))
 
         # Wait a respectable amount of time so the display can refresh
         print("Sleeping 4 Seconds")
         time.sleep(4)
 
 
-def tweet_to_display():
+def tweet_output_to_display():
     """Used to output the latest CTA Tweet to the Display"""
-    corner_image_size = (25, 25)
     tweet_text = re.sub(
         r'http\S+|( |(?<![a-zA-Z]))[M][o][r][e][:]( |(?![a-zA-Z]))', '',
         str(get_latest_cta_tweet()))
     tweet_text_wrapped = textwrap.wrap(tweet_text, width=25)
-    icon_twitter = Image.open("/home/pi/ctapi/icons/twitter.png")
     tweet_length = len(tweet_text_wrapped)
-    current_tweet_page = 1
     total_tweet_pages = math.ceil(tweet_length / 4)
+    # icon_twitter = Image.open("/home/pi/ctapi/icons/twitter.png")
     printed_lines = 0
-    while printed_lines != len(
-            tweet_text_wrapped) and ENABLE_TWITTER_LOOKUP is True:
-        twitter_image = Image.new('1', (epd.height, epd.width),
-                                  255)  # 255: clear the frame
-        twitter_draw = ImageDraw.Draw(twitter_image)
+    current_tweet_page = 1
+    while printed_lines != len(tweet_text_wrapped) and ENABLE_TWITTER_LOOKUP is True:
+        # twitter_image = Image.new('1', (epd.height, epd.width),
+        #                           255)  # 255: clear the frame
+        # twitter_draw = ImageDraw.Draw(twitter_image)
         # Store & Draw the header
         tweet_line_1 = "Latest Tweet from @CTA"
-        twitter_draw.text((0, 0), tweet_line_1, font=bold_font, fill=0)
+        # twitter_draw.text((0, 0), tweet_line_1, font=bold_font, fill=0)
 
         # Store & Draw Tweet
         try:
             tweet_line_2 = tweet_text_wrapped[printed_lines]
             printed_lines += 1
-            twitter_draw.text((0, 20), tweet_line_2, font=tweet_font, fill=0)
+            # twitter_draw.text((0, 20), tweet_line_2, font=tweet_font, fill=0)
         except:  # pylint: disable=bare-except
             tweet_line_2 = ""
         try:
             tweet_line_3 = tweet_text_wrapped[printed_lines]
             printed_lines += 1
-            twitter_draw.text((0, 40), tweet_line_3, font=tweet_font, fill=0)
+            # twitter_draw.text((0, 40), tweet_line_3, font=tweet_font, fill=0)
         except:  # pylint: disable=bare-except
             tweet_line_3 = ""
         try:
             tweet_line_4 = tweet_text_wrapped[printed_lines]
             printed_lines += 1
-            twitter_draw.text((0, 60), tweet_line_4, font=tweet_font, fill=0)
+            # twitter_draw.text((0, 60), tweet_line_4, font=tweet_font, fill=0)
         except:  # pylint: disable=bare-except
             tweet_line_4 = ""
         try:
             tweet_line_5 = tweet_text_wrapped[printed_lines]
             printed_lines += 1
-            twitter_draw.text((0, 80), tweet_line_5, font=tweet_font, fill=0)
+            # twitter_draw.text((0, 80), tweet_line_5, font=tweet_font, fill=0)
         except:  # pylint: disable=bare-except
             tweet_line_5 = ""
-        icon_twitter = icon_twitter.resize(corner_image_size)
-        twitter_image.paste(icon_twitter, (225, 97))
         try:
             tweet_line_6 = "Page " + str(current_tweet_page) + " / " + str(
                 total_tweet_pages)
-            twitter_draw.text((0, 100), tweet_line_6, font=tweet_font, fill=0)
+            # twitter_draw.text((0, 100), tweet_line_6, font=tweet_font, fill=0)
         except:  # pylint: disable=bare-except
             tweet_line_6 = ""
-        icon_twitter = icon_twitter.resize(corner_image_size)
-        twitter_image.paste(icon_twitter, (225, 97))
+        # icon_twitter = icon_twitter.resize(corner_image_size)
+        # twitter_image.paste(icon_twitter, (225, 97))
 
-        if tweet_line_1 != "":
-            print(tweet_line_1)
-            print(tweet_line_2)
-            print(tweet_line_3)
-            print(tweet_line_4)
-            print(tweet_line_5)
-            print(tweet_line_6)
+        print(tweet_line_1, "\n", tweet_line_2, "\n", tweet_line_3, "\n",
+              tweet_line_4, "\n", tweet_line_5, "\n", tweet_line_6)
 
         current_tweet_page += 1
 
         # Send to Display
-        epd.display(epd.getbuffer(twitter_image))
+        # epd.display(epd.getbuffer(twitter_image))
 
         # Wait a respectable amount of time so the display can refresh
         print("Sleeping 4 Seconds")
         time.sleep(4)
+
+
+def get_logo_for_display(icon_type):
+    """Used to identify the correct icon to go with the line on display"""
+    # if icon_type == "train":
+    #     icon_resized = icon_train.resize(corner_image_size)
+    # elif icon_type == "bus":
+    #     icon_resized = icon_bus.resize(corner_image_size)
+    # elif icon_type == "bicycle":
+    #     icon_resized = icon_bicycle.resize(corner_image_size)
+    # return icon_resized
 
 
 print("Welcome to TrainTracker, Python/RasPi Edition!")
@@ -571,6 +554,6 @@ while True:  # Where the magic happens
 
         information_to_display(
             information_output_to_display(arrival_information))
-        tweet_to_display()
+        tweet_output_to_display()
 
         REFRESH_DISPLAY = time.monotonic()
