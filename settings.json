@@ -1,0 +1,37 @@
+{
+    "train-tracker": {
+        "enabled": "True",
+        "//first-comment": "Station/Stop Information for Trains/Buses - Bus Stop Items must contain equal number of items",
+        "//second-comment": "Enter the train station #'s to lookup",
+        "station-ids": ["30197","30198"],
+        "do-not-persist-stations": ["UIC-Halsted","Rosemont","Jefferson Park", "Howard", "See train"],
+        "api-url": "http://lapi.transitchicago.com/api/1.0/ttarrivals.aspx?key={}&stpid={}"
+    },
+    "bus-tracker": {
+        "enabled": "True",
+        "//first-comment": "Enter the bus stop #'s for the stops you want estimated times for",
+        "stop-ids": ["5465","1323","11264","18261"],
+        "//second-comment": "Enter the corresponding bus route # you want for each bus_stop_id",
+        "route-ids": ["76","74","82","82"],
+        "api-url": "http://www.ctabustracker.com/bustime/api/v2/getpredictions?key={}&stpid={}&rt={}"
+    }, 
+    "divvy-tracker": {
+        "enabled": "True",
+        "//first-comment": "Enter the Divvy station #'s to lookup",
+        "station-ids": ["a3a9607f-a135-11e9-9cda-0a87ae2ba916","a3b01578-a135-11e9-9cda-0a87ae2ba916","1674190501540014960"],
+        "api-station-information-url": "https://gbfs.divvybikes.com/gbfs/en/station_information.json",
+        "api-station-status-url": "https://gbfs.divvybikes.com/gbfs/en/station_status.json",
+        "street-names-to-remove":{
+            " St": "",
+            " Rd": "",
+            " Ave": "",
+            "Town": "Twn",
+            "Center": "Ctr",
+            "  ": " "
+        }
+    }, 
+    "tweet-tracker": {
+        "enabled": "True",
+        "api-url": "https://api.twitter.com/2/users/{}/tweets"
+    }
+}

@@ -21,11 +21,13 @@ epd.Clear(0xFF)
 bold_font = ImageFont.truetype(
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", 18)
 standard_font = ImageFont.truetype(
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 17)
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-New.ttf", 16)
 standard_font_small = ImageFont.truetype(
-    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 16)
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-New.ttf", 16)
 tweet_font = ImageFont.truetype(
     "/usr/share/fonts/truetype/dejavu/DejaVuSerifCondensed-Bold.ttf", 17)
+icon_font = ImageFont.truetype(
+    "/usr/share/fonts/truetype/ctapi/Ctapi-Regular.ttf", 17)
 icon_bus = Image.open("/home/pi/ctapi/icons/bus_live.png")
 icon_train = Image.open("/home/pi/ctapi/icons/train_live.png")
 icon_bicycle = Image.open("/home/pi/ctapi/icons/bicycle.png")
@@ -41,31 +43,6 @@ twitter_api_key = os.getenv('TWITTER_API_KEY')
 home_latitude = os.getenv('HOME_LATITUDE')
 home_longitude = os.getenv('HOME_LONGITUDE')
 
-# API URL's
-TRAIN_TRACKER_URL = "http://lapi.transitchicago.com/api/1.0/ttarrivals.aspx?key={}&stpid={}"
-BUS_TRACKER_URL = "http://www.ctabustracker.com/bustime/api/v2/getpredictions?key={}&stpid={}&rt={}"
-DIVVY_STATION_INFORMATION_URL = "https://gbfs.divvybikes.com/gbfs/en/station_information.json"
-DIVVY_STATION_STATUS_URL = "https://gbfs.divvybikes.com/gbfs/en/station_status.json"
-TWITTER_TWEETS_URL = "https://api.twitter.com/2/users/{}/tweets"
-
-# Station/Stop Information for Trains/Buses - Bus Stop Items must contain equal number of items
-# Enter the train station #'s to lookup
-ENABLE_TRAIN_TRACKER = True  # Enter True or False to Enable or Disable Train Portion
-TRAIN_STATION_STOP_IDS = "30197,30198"
-
-# Enter the bus stop #'s for the stops you want estimated times for
-ENABLE_BUS_TRACKER = True  # Enter True or False to Enable or Disable Bus Portion
-BUS_STOP_STOP_IDS = "5465,1323,11264,18261"
-# Enter the corresponding bus route # you want for each bus_stop_id
-BUS_STOP_ROUTE_IDS = "76,74,82,82"
-
-# Enter the Divvy station #'s to lookup
-ENABLE_DIVVY_STATION_CHECK = True  # Enter True or False to Enable or Disable Divvy Portion
-DIVVY_STATION_IDS = "a3a9607f-a135-11e9-9cda-0a87ae2ba916,a3b01578-a135-11e9-9cda-0a87ae2ba916"
-
-# Twitter Lookup
-ENABLE_TWITTER_LOOKUP = True
-
 # Setting Up Variable for Storing Station Information - Will keep stations long turn
 arrival_information = json.loads('{"trains":{},"buses":{},"bicycles":{}}')
 REFRESH_DISPLAY = None
@@ -75,7 +52,7 @@ def train_api_call_to_cta(stop_id):
     """Gotta talk to the CTA and get Train Times"""
     print("Making CTA Train API Call...")
     api_response = requests.get(
-        TRAIN_TRACKER_URL.format(train_api_key, stop_id))
+        train_tracker_url.format(train_api_key, stop_id))
     train_arrival_times(parse_api_response(api_response))
     return api_response
 
@@ -84,7 +61,7 @@ def bus_api_call_to_cta(stop_code, route_code):
     """Gotta talk to the CTA and get Bus Times"""
     print("Making CTA Bus API Call...")
     api_response = requests.get(
-        BUS_TRACKER_URL.format(bus_api_key, stop_code, route_code))
+        bus_tracker_url.format(bus_api_key, stop_code, route_code))
     bus_eta_times(parse_api_response(api_response))
     return api_response
 
@@ -92,7 +69,7 @@ def bus_api_call_to_cta(stop_code, route_code):
 def divvy_api_call_station_information():
     """Gotta talk to the Divvy and get Station Status"""
     print("Making Divvy Station Information API Call...")
-    api_response = requests.get(DIVVY_STATION_INFORMATION_URL)
+    api_response = requests.get(divvy_station_information_url)
     station_json = json.loads(api_response.content)
     return station_json
 
@@ -100,7 +77,7 @@ def divvy_api_call_station_information():
 def divvy_api_call_station_status():
     """Gotta talk to the Divvy and get Station Status"""
     print("Making Divvy Station Stats API Call...")
-    api_response = requests.get(DIVVY_STATION_STATUS_URL)
+    api_response = requests.get(divvy_station_status_url)
     station_json = json.loads(api_response.content)
     return station_json
 
@@ -110,9 +87,12 @@ def get_latest_cta_tweet():
     print("Making Twitter API Call...")
     headers = {"Authorization": twitter_api_key}
     cta_user_id = "342782636"
-    api_response = requests.get(TWITTER_TWEETS_URL.format(cta_user_id),
-                                headers=headers)
-    tweets_json = json.loads(api_response.content)
+    try:
+        api_response = requests.get(twitter_tweets_url.format(cta_user_id),
+                                    headers=headers)
+        tweets_json = json.loads(api_response.content)
+    except:  # pylint: disable=bare-except
+        print("Error in API Call to Twitter")
     tweet_counter = 0
     found_tweet = False
     # All status Tweets start with an Open Bracket - Hoping to filter out some of the other garbage
@@ -143,7 +123,6 @@ def add_train_station_to_json(station_name):
     """Function is called if a new station is identified per API Call"""
     station_information = {}
     arrival_information["trains"][station_name] = station_information
-    # persistent_station_tracking["trains"][station_name] = station_information
 
 
 def add_train_stop_to_json(eta, stop_id):
@@ -155,6 +134,7 @@ def add_train_stop_to_json(eta, stop_id):
         'rt').text + " Line to " + eta.find('destNm').text
     stop_information["destination_name"] = eta.find('destNm').text
     stop_information["route"] = eta.find('rt').text
+    stop_information["stop-id"] = eta.find('stpId').text
     stop_information["estimated_times"] = []
 
     arrival_information["trains"][station_name][stop_id] = stop_information
@@ -203,23 +183,23 @@ def add_train_eta_to_array(eta, station_name, stop_id):
     if eta.find('isSch').text == "0":
         if eta.find('isApp').text == "1":
             arrival_information["trains"][station_name][stop_id][
-                "estimated_times"].append("Due+")
+                "estimated_times"].append("Due $")
         else:
             prediction = eta.find('prdt').text
             arrival = eta.find('arrT').text
             estimated_time = str(minutes_between(prediction, arrival))
             (arrival_information["trains"][station_name][stop_id]
-             ["estimated_times"].append(estimated_time + "min+"))
+             ["estimated_times"].append(estimated_time + "min $"))
     else:
         if eta.find('isApp').text == "1":
             arrival_information["trains"][station_name][stop_id][
-                "estimated_times"].append("Due-")
+                "estimated_times"].append("Due %")
         else:
             prediction = eta.find('prdt').text
             arrival = eta.find('arrT').text
             estimated_time = str(minutes_between(prediction, arrival))
             (arrival_information["trains"][station_name][stop_id]
-             ["estimated_times"].append(estimated_time + "min-"))
+             ["estimated_times"].append(estimated_time + "min %"))
 
 
 def bus_eta_times(bus_api_response):
@@ -237,27 +217,22 @@ def bus_eta_times(bus_api_response):
 def add_bus_eta_to_array(prd, stop_id):
     """Parses API Result from Bus Tracker API and adds ETA's to a list"""
     if prd.find('prdctdn').text == "DUE":
-        arrival_information["buses"][stop_id]["estimated_times"].append("Due")
+        arrival_information["buses"][stop_id]["estimated_times"].append(
+            "Due $")
     elif prd.find('prdctdn').text == "DLY":
         arrival_information["buses"][stop_id]["estimated_times"].append(
-            "Delayed")
+            "Dlyed %")
     else:
         (arrival_information["buses"][stop_id]["estimated_times"].append(
-            prd.find('prdctdn').text + "min"))
+            prd.find('prdctdn').text + "min $"))
 
 
 def divvy_process_station_stats(station_stats, station_information):
     """Takes Station Information and Stats from API Call and gets needed information"""
-    divvy_to_replace = {
-        " St": '',
-        " Rd": "",
-        " Ave": "",
-        "Town": "Twn",
-        "Center": "Ctr"
-    }
+    divvy_to_replace = settings["divvy-tracker"]["street-names-to-remove"]
     for station in station_information['data']['stations']:
         station_id = station['station_id']
-        if station_id in DIVVY_STATION_IDS:
+        if station_id in divvy_station_ids:
             found_station_information = {}
             station_distance_long = distance.distance(
                 (home_latitude, home_longitude),
@@ -275,7 +250,7 @@ def divvy_process_station_stats(station_stats, station_information):
                 station['station_id']] = found_station_information
 
     for station in station_stats['data']['stations']:
-        if station['station_id'] in DIVVY_STATION_IDS:
+        if station['station_id'] in divvy_station_ids:
             arrival_information["bicycles"][
                 station['station_id']]["bike_numbers"].append(
                     str(station['num_ebikes_available']) + " ebikes")
@@ -298,11 +273,27 @@ def create_string_of_items(items):
     return string
 
 
-def information_output_to_display(arrival_information_input):
+def rouge_station_cleanup(arrival_information_input):
+    """Used to cleanup structure of any stations that are no longer requested"""
+    for station in arrival_information_input['trains'].copy():
+        for train in arrival_information_input['trains'][station].copy():
+            if arrival_information['trains'][station][train][
+                    'stop-id'] not in train_station_stop_ids:
+                print(
+                    "No longer tracking Stop ID: " +
+                    arrival_information['trains'][station][train]['stop-id'] +
+                    " - Removing")
+                del arrival_information['trains'][station][train]
+    return arrival_information_input
+
+
+def information_output_to_display(arrival_information_input_unclean):
     """Used to create structure for use when outputting data to e-ink epd"""
+    arrival_information_input = rouge_station_cleanup(
+        arrival_information_input_unclean)
     display_information_output = []
-    for station in arrival_information_input['trains']:
-        for train in arrival_information_input['trains'][station]:
+    for station in arrival_information_input['trains'].copy():
+        for train in arrival_information_input['trains'][station].copy():
             if arrival_information['trains'][station][train][
                     "estimated_times"] != []:
                 display_information_output.append({
@@ -319,8 +310,6 @@ def information_output_to_display(arrival_information_input):
                     'item_type':
                     "train",
                 })
-                arrival_information['trains'][station][train][
-                    "estimated_times"] = []
             else:
                 display_information_output.append({
                     'line_1':
@@ -334,6 +323,16 @@ def information_output_to_display(arrival_information_input):
                     'item_type':
                     "train",
                 })
+            if arrival_information['trains'][station][train][
+                    'destination_name'] in train_dest_do_not_persist and arrival_information[
+                        'trains'][station][train]["estimated_times"] == []:
+                print("No arrivals found - Deleting Non-Persistant Station: " +
+                      arrival_information['trains'][station][train]
+                      ['destination_name'])
+                del arrival_information['trains'][station][train]
+            else:
+                arrival_information['trains'][station][train][
+                    "estimated_times"] = []
 
     for bus in arrival_information['buses']:
         if arrival_information['buses'][bus]["estimated_times"] != []:
@@ -455,7 +454,8 @@ def tweet_output_to_display():
     icon_twitter = Image.open("/home/pi/ctapi/icons/twitter.png")
     printed_lines = 0
     current_tweet_page = 1
-    while printed_lines != len(tweet_text_wrapped) and ENABLE_TWITTER_LOOKUP is True:
+    while printed_lines != len(
+            tweet_text_wrapped) and enable_twitter_lookup == "True":
         twitter_image = Image.new('1', (epd.height, epd.width),
                                   255)  # 255: clear the frame
         twitter_draw = ImageDraw.Draw(twitter_image)
@@ -523,34 +523,62 @@ def get_logo_for_display(icon_type):
 
 print("Welcome to TrainTracker, Python/RasPi Edition!")
 while True:  # Where the magic happens
+    # Settings
+    file = open(file='/home/pi/ctapi/settings.json',
+                mode='r',
+                encoding='utf-8')
+    settings = json.load(file)
+
+    # API URL's
+    train_tracker_url = settings["train-tracker"]["api-url"]
+    bus_tracker_url = settings["bus-tracker"]["api-url"]
+    divvy_station_information_url = settings["divvy-tracker"][
+        "api-station-information-url"]
+    divvy_station_status_url = settings["divvy-tracker"][
+        "api-station-status-url"]
+    twitter_tweets_url = settings["tweet-tracker"]["api-url"]
+
+    # Variables for Settings information - Only make settings changes in the settings.json file
+    enable_train_tracker = settings["train-tracker"]["enabled"]
+    train_station_stop_ids = settings["train-tracker"]["station-ids"]
+    train_dest_do_not_persist = settings["train-tracker"][
+        "do-not-persist-stations"]
+    enable_bus_tracker = settings["bus-tracker"]["enabled"]
+    bus_stop_stop_ids = settings["bus-tracker"]["stop-ids"]
+    bus_stop_route_ids = settings["bus-tracker"]["route-ids"]
+    enable_divvy_station_check = settings["divvy-tracker"]["enabled"]
+    divvy_station_ids = settings["divvy-tracker"]["station-ids"]
+    enable_twitter_lookup = settings["tweet-tracker"]["enabled"]
+
     if (not REFRESH_DISPLAY) or (time.monotonic() - REFRESH_DISPLAY) > 2:
         current_time_console = "The Current Time is: " + \
             datetime.strftime(datetime.now(), "%H:%M")
         print("\n" + current_time_console)
 
-        if TRAIN_STATION_STOP_IDS != "" and ENABLE_TRAIN_TRACKER is True:
-            train_station_stpIds_split = TRAIN_STATION_STOP_IDS.split(',')
-            for train_stop_id_to_check in train_station_stpIds_split:
-                # try:
-                response = train_api_call_to_cta(train_stop_id_to_check)
-                # except:  # pylint: disable=bare-except
-                # print("Error in API Call to Train Tracker")
+        if train_station_stop_ids != "" and enable_train_tracker == "True":
+            for train_stop_id_to_check in train_station_stop_ids:
+                try:
+                    response = train_api_call_to_cta(train_stop_id_to_check)
+                except:  # pylint: disable=bare-except
+                    print("Error in API Call to Train Tracker")
 
-        if BUS_STOP_STOP_IDS != "" and ENABLE_BUS_TRACKER is True:
-            bus_stop_stpids_split = BUS_STOP_STOP_IDS.split(',')
-            bus_stop_route_ids_split = BUS_STOP_ROUTE_IDS.split(',')
+        if bus_stop_stop_ids != "" and enable_bus_tracker == "True":
             BUS_COUNT = 0
-            for bus_stop_id in bus_stop_stpids_split:
+            for bus_stop_id in bus_stop_stop_ids:
                 try:
                     bus_api_call_to_cta(bus_stop_id,
-                                        bus_stop_route_ids_split[BUS_COUNT])
+                                        bus_stop_route_ids[BUS_COUNT])
                     BUS_COUNT += 1
                 except:  # pylint: disable=bare-except
                     print("Error in API Call to Bus Tracker")
 
-        if DIVVY_STATION_IDS != "" and ENABLE_DIVVY_STATION_CHECK is True:
-            divvy_process_station_stats(divvy_api_call_station_status(),
-                                        divvy_api_call_station_information())
+        if divvy_station_ids != "" and enable_divvy_station_check == "True":
+            try:
+                divvy_process_station_stats(
+                    divvy_api_call_station_status(),
+                    divvy_api_call_station_information())
+            except:  # pylint: disable=bare-except
+                print("Error in API Call to Divvy Tracker")
 
         information_to_display(
             information_output_to_display(arrival_information))
