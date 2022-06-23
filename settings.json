@@ -27,6 +27,9 @@
             " Ave": "",
             "Town": "Twn",
             "Center": "Ctr",
+            "Public Rack - ": "",
+            "classic": "Dock",
+            "lightweight": "Rack",
             "  ": " "
         }
     }, 

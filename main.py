@@ -239,12 +239,15 @@ def divvy_process_station_stats(station_stats, station_information):
                 (station['lat'], station['lon'])).miles
             station_distance_short = str(round(station_distance_long,
                                                2)) + "mi"
+            station_name = station['name']
+            station_type = station['station_type']
             for key, value in divvy_to_replace.items():
-                station_name = re.sub(r"\b" + key + r"\b", value,
-                                      station['name'])
+                station_name = re.sub(r"\b" + key + r"\b", value, station_name)
+            for key, value in divvy_to_replace.items():
+                station_type = re.sub(r"\b" + key + r"\b", value, station_type)
             found_station_information["station_name"] = station_name
             found_station_information["capacity"] = str(station['capacity'])
-            found_station_information["distance"] = station_distance_short
+            found_station_information["distance"] = "Type: " + station_type + " | Distance: " + station_distance_short
             found_station_information["bike_numbers"] = []
             arrival_information["bicycles"][
                 station['station_id']] = found_station_information
@@ -366,7 +369,6 @@ def information_output_to_display(arrival_information_input_unclean):
             str(arrival_information["bicycles"][station]
                 ["station_name"]).replace("Ave", ""),
             'line_2':
-            "Distance: " +
             arrival_information["bicycles"][station]["distance"],
             'line_3':
             create_string_of_items(
